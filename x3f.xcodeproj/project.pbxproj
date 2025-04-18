@@ -22,7 +22,6 @@
 		524568E12DB2C40100DC4A57 /* x3f_process.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568CA2DB2C1B000DC4A57 /* x3f_process.c */; };
 		524568E22DB2C41800DC4A57 /* x3f_image.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568B62DB2C1B000DC4A57 /* x3f_image.c */; };
 		524568E32DB2C44500DC4A57 /* x3f_denoise.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 524568A92DB2C1B000DC4A57 /* x3f_denoise.cpp */; };
-		524568E42DB2C90000DC4A57 /* x3f_denoise_aniso.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 524568AB2DB2C1B000DC4A57 /* x3f_denoise_aniso.cpp */; };
 		524568E52DB2C90D00DC4A57 /* x3f_denoise_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 524568AD2DB2C1B000DC4A57 /* x3f_denoise_utils.cpp */; };
 		524568E62DB2C96200DC4A57 /* x3f_meta.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568BE2DB2C1B000DC4A57 /* x3f_meta.c */; };
 		524568E72DB2C97600DC4A57 /* x3f_printf.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568C82DB2C1B000DC4A57 /* x3f_printf.c */; };
@@ -246,7 +245,6 @@
 				524568DC2DB2C35800DC4A57 /* x3f_output_tiff.c in Sources */,
 				524568DE2DB2C3E100DC4A57 /* x3f_spatial_gain.c in Sources */,
 				524568E72DB2C97600DC4A57 /* x3f_printf.c in Sources */,
-				524568E42DB2C90000DC4A57 /* x3f_denoise_aniso.cpp in Sources */,
 				524568D82DB2C27D00DC4A57 /* x3f_print_meta.c in Sources */,
 				524568E52DB2C90D00DC4A57 /* x3f_denoise_utils.cpp in Sources */,
 				524568D22DB2C22100DC4A57 /* x3f_io.c in Sources */,
