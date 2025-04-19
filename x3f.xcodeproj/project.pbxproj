@@ -25,24 +25,19 @@
 		524568E52DB2C90D00DC4A57 /* x3f_denoise_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 524568AD2DB2C1B000DC4A57 /* x3f_denoise_utils.cpp */; };
 		524568E62DB2C96200DC4A57 /* x3f_meta.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568BE2DB2C1B000DC4A57 /* x3f_meta.c */; };
 		524568E72DB2C97600DC4A57 /* x3f_printf.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568C82DB2C1B000DC4A57 /* x3f_printf.c */; };
+		524568F32DB38AC900DC4A57 /* x3f_io_test.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568B92DB2C1B000DC4A57 /* x3f_io_test.c */; };
+		524568F42DB38ADB00DC4A57 /* x3f_print_meta.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568C62DB2C1B000DC4A57 /* x3f_print_meta.c */; };
+		524568F52DB38AEB00DC4A57 /* x3f_io.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568B82DB2C1B000DC4A57 /* x3f_io.c */; };
+		524568F62DB38B0E00DC4A57 /* x3f_printf.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568C82DB2C1B000DC4A57 /* x3f_printf.c */; };
+		524568F72DB38B1600DC4A57 /* x3f_version.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568CE2DB2C1B000DC4A57 /* x3f_version.c */; };
+		524568F82DB38B2100DC4A57 /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 524568D62DB2C24F00DC4A57 /* libiconv.tbd */; };
+		524569042DB38B9100DC4A57 /* x3f_matrix_test.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568BC2DB2C1B000DC4A57 /* x3f_matrix_test.c */; };
+		524569052DB38BA600DC4A57 /* x3f_printf.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568C82DB2C1B000DC4A57 /* x3f_printf.c */; };
+		524569062DB38BB000DC4A57 /* x3f_matrix.c in Sources */ = {isa = PBXBuildFile; fileRef = 524568BB2DB2C1B000DC4A57 /* x3f_matrix.c */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		5245689D2DB2C19C00DC4A57 /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		5245689F2DB2C19C00DC4A57 /* x3f_extract */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = x3f_extract; sourceTree = BUILT_PRODUCTS_DIR; };
-		524568A62DB2C1B000DC4A57 /* makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = makefile; sourceTree = "<group>"; };
-		524568A72DB2C1B000DC4A57 /* mingw_dowildcard.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = mingw_dowildcard.c; sourceTree = "<group>"; };
 		524568A82DB2C1B000DC4A57 /* x3f_denoise.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = x3f_denoise.h; sourceTree = "<group>"; };
 		524568A92DB2C1B000DC4A57 /* x3f_denoise.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = x3f_denoise.cpp; sourceTree = "<group>"; };
 		524568AA2DB2C1B000DC4A57 /* x3f_denoise_aniso.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = x3f_denoise_aniso.h; sourceTree = "<group>"; };
@@ -84,6 +79,8 @@
 		524568CE2DB2C1B000DC4A57 /* x3f_version.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = x3f_version.c; sourceTree = "<group>"; };
 		524568D42DB2C24100DC4A57 /* libiconv.2.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.2.tbd; path = usr/lib/libiconv.2.tbd; sourceTree = SDKROOT; };
 		524568D62DB2C24F00DC4A57 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
+		524568EC2DB38ABE00DC4A57 /* x3f_io_test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = x3f_io_test; sourceTree = BUILT_PRODUCTS_DIR; };
+		524568FD2DB38B7600DC4A57 /* x3f_matrix_test */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = x3f_matrix_test; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +89,21 @@
 			buildActionMask = 2147483647;
 			files = (
 				524568D72DB2C24F00DC4A57 /* libiconv.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		524568E92DB38ABE00DC4A57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				524568F82DB38B2100DC4A57 /* libiconv.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		524568FA2DB38B7600DC4A57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -111,6 +123,8 @@
 			isa = PBXGroup;
 			children = (
 				5245689F2DB2C19C00DC4A57 /* x3f_extract */,
+				524568EC2DB38ABE00DC4A57 /* x3f_io_test */,
+				524568FD2DB38B7600DC4A57 /* x3f_matrix_test */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,8 +132,6 @@
 		524568CF2DB2C1B000DC4A57 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				524568A62DB2C1B000DC4A57 /* makefile */,
-				524568A72DB2C1B000DC4A57 /* mingw_dowildcard.c */,
 				524568A82DB2C1B000DC4A57 /* x3f_denoise.h */,
 				524568A92DB2C1B000DC4A57 /* x3f_denoise.cpp */,
 				524568AA2DB2C1B000DC4A57 /* x3f_denoise_aniso.h */,
@@ -181,7 +193,6 @@
 			buildPhases = (
 				5245689B2DB2C19C00DC4A57 /* Sources */,
 				5245689C2DB2C19C00DC4A57 /* Frameworks */,
-				5245689D2DB2C19C00DC4A57 /* CopyFiles */,
 			);
 			buildRules = (
 			);
@@ -194,6 +205,42 @@
 			productReference = 5245689F2DB2C19C00DC4A57 /* x3f_extract */;
 			productType = "com.apple.product-type.tool";
 		};
+		524568EB2DB38ABE00DC4A57 /* x3f_io_test */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 524568F02DB38ABE00DC4A57 /* Build configuration list for PBXNativeTarget "x3f_io_test" */;
+			buildPhases = (
+				524568E82DB38ABE00DC4A57 /* Sources */,
+				524568E92DB38ABE00DC4A57 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = x3f_io_test;
+			packageProductDependencies = (
+			);
+			productName = x3f_io_test;
+			productReference = 524568EC2DB38ABE00DC4A57 /* x3f_io_test */;
+			productType = "com.apple.product-type.tool";
+		};
+		524568FC2DB38B7600DC4A57 /* x3f_matrix_test */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 524569012DB38B7600DC4A57 /* Build configuration list for PBXNativeTarget "x3f_matrix_test" */;
+			buildPhases = (
+				524568F92DB38B7600DC4A57 /* Sources */,
+				524568FA2DB38B7600DC4A57 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = x3f_matrix_test;
+			packageProductDependencies = (
+			);
+			productName = x3f_matrix_test;
+			productReference = 524568FD2DB38B7600DC4A57 /* x3f_matrix_test */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -204,6 +251,12 @@
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					5245689E2DB2C19C00DC4A57 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					524568EB2DB38ABE00DC4A57 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					524568FC2DB38B7600DC4A57 = {
 						CreatedOnToolsVersion = 16.3;
 					};
 				};
@@ -223,6 +276,8 @@
 			projectRoot = "";
 			targets = (
 				5245689E2DB2C19C00DC4A57 /* x3f_extract */,
+				524568EB2DB38ABE00DC4A57 /* x3f_io_test */,
+				524568FC2DB38B7600DC4A57 /* x3f_matrix_test */,
 			);
 		};
 /* End PBXProject section */
@@ -249,6 +304,28 @@
 				524568E52DB2C90D00DC4A57 /* x3f_denoise_utils.cpp in Sources */,
 				524568D22DB2C22100DC4A57 /* x3f_io.c in Sources */,
 				524568E02DB2C3F200DC4A57 /* x3f_histogram.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		524568E82DB38ABE00DC4A57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				524568F72DB38B1600DC4A57 /* x3f_version.c in Sources */,
+				524568F52DB38AEB00DC4A57 /* x3f_io.c in Sources */,
+				524568F62DB38B0E00DC4A57 /* x3f_printf.c in Sources */,
+				524568F42DB38ADB00DC4A57 /* x3f_print_meta.c in Sources */,
+				524568F32DB38AC900DC4A57 /* x3f_io_test.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		524568F92DB38B7600DC4A57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				524569052DB38BA600DC4A57 /* x3f_printf.c in Sources */,
+				524569042DB38B9100DC4A57 /* x3f_matrix_test.c in Sources */,
+				524569062DB38BB000DC4A57 /* x3f_matrix.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,6 +489,38 @@
 			};
 			name = Release;
 		};
+		524568F12DB38ABE00DC4A57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		524568F22DB38ABE00DC4A57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		524569022DB38B7600DC4A57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		524569032DB38B7600DC4A57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -429,6 +538,24 @@
 			buildConfigurations = (
 				524568A42DB2C19C00DC4A57 /* Debug */,
 				524568A52DB2C19C00DC4A57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		524568F02DB38ABE00DC4A57 /* Build configuration list for PBXNativeTarget "x3f_io_test" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				524568F12DB38ABE00DC4A57 /* Debug */,
+				524568F22DB38ABE00DC4A57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		524569012DB38B7600DC4A57 /* Build configuration list for PBXNativeTarget "x3f_matrix_test" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				524569022DB38B7600DC4A57 /* Debug */,
+				524569032DB38B7600DC4A57 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
