@@ -12,11 +12,17 @@
 
 #include "x3f_io.h"
 
+typedef enum x3f_color_profile_e {
+    PROFILE_EMBED=0,
+    PROFILE_CALIBRATED=1,
+} x3f_color_profile_t;
+
 extern x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f, char *outfilename,
 					     int fix_bad,
 					     int denoise,
 					     int apply_sgain,
 					     char *wb,
-					     int compress);
+					     int compress,
+                         x3f_color_profile_t color_profile);
 
 #endif

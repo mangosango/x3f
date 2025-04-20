@@ -184,6 +184,7 @@ int main(int argc, char *argv[])
   int apply_sgain = -1;
   output_file_type_t file_type = DNG;
   x3f_color_encoding_t color_encoding = SRGB;
+  x3f_color_profile_t color_profile = PROFILE_EMBED;
   int files = 0;
   int errors = 0;
   int log_hist = 0;
@@ -264,6 +265,22 @@ int main(int argc, char *argv[])
       compress = 1;
     else if (!strcmp(argv[i], "-ocl"))
       use_opencl = 1;
+    
+    else if (!strcmp(argv[i], "-profile") && (i+1)<argc) {
+      char *encoding = argv[++i];
+      if (!strcmp(encoding, "embed"))
+    color_profile = PROFILE_EMBED;
+      else if (!strcmp(encoding, "calibrated"))
+    color_profile = PROFILE_CALIBRATED;
+      else if (!strcmp(encoding, "dcp")) {
+          fprintf(stderr, "TODO: not implemented: %s\n", encoding);
+          usage(argv[0]);
+      }
+      else {
+    fprintf(stderr, "Unknown color profile: %s\n", encoding);
+    usage(argv[0]);
+      }
+    }
 
   /* Strange Stuff */
     else if ((!strcmp(argv[i], "-offset")) && (i+1)<argc)
@@ -407,7 +424,7 @@ int main(int argc, char *argv[])
       x3f_printf(INFO, "Dump RAW as DNG to %s\n", outfile);
       ret_dump = x3f_dump_raw_data_as_dng(x3f, tmpfile,
 					  fix_bad, denoise, sgain, wb,
-					  compress);
+					  compress, color_profile);
       break;
     case PPMP3:
     case PPMP6:

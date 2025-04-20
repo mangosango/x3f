@@ -288,6 +288,92 @@ static x3f_return_t write_camera_profiles(x3f_t *x3f, char *wb,
 #define BINMODE 0
 #endif
 
+typedef enum {
+    PROFILE_MODEL_SD15=1,
+//    PROFILE_MODEL_DP2Q=2,
+    PROFILE_MODEL_SDQH=3
+} color_profile_model_t;
+
+static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_profile_t color_profile)
+{
+    if (color_profile != PROFILE_CALIBRATED) {
+        return X3F_OK;
+    }
+    
+    char *cammodel;
+
+    color_profile_model_t model = 0;
+    
+    if (x3f_get_prop_entry(x3f, "CAMMODEL", &cammodel)) {
+        if (!strcmp(cammodel, "SIGMA SD15")) {
+            model = PROFILE_MODEL_SD15;
+        }
+    }
+    uint32_t cameraid;
+
+    if (x3f_get_camf_unsigned(x3f, "CAMERAID", &cameraid)) {
+        if (cameraid == X3F_CAMERAID_SDQH) {
+            model = PROFILE_MODEL_SDQH;
+        }
+    }
+      
+    
+    if (model == 0) {
+        x3f_printf(ERR, "not supported camera model for calibrated color profile.\n");
+        return X3F_ARGUMENT_ERROR;
+    }
+    
+    // color matrix 1, StdA
+    switch (model) {
+        case PROFILE_MODEL_SD15:
+        {
+            float color_matrix1_sd15[9] = {1.575339, -0.605818, -0.065272, 0.753385,  0.093570,  0.159122, 0.338864,  0.183074,  0.509481};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sd15);
+        }
+            break;
+        case PROFILE_MODEL_SDQH:
+        {
+            float color_matrix1_sdqh[9] = {1.187778, -0.177629, -0.077932, 0.324313,  0.432071,  0.135978, 0.074148,  0.409630,  0.418587};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sdqh);
+        }
+            break;
+    }
+    
+    
+    TIFFSetField(tiff_out, TIFFTAG_CALIBRATIONILLUMINANT1, 17); // StdA, // added
+    
+    // color matrix 2, D65
+    switch (model) {
+        case PROFILE_MODEL_SD15:
+        {
+            float color_matrix2_sd15[9] = {1.431427, -0.160064, -0.217438, 0.622291,  0.474456,  0.016736, 0.211198,  0.496788,  0.342864};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sd15);
+        }
+            break;
+        case PROFILE_MODEL_SDQH:
+        {
+            float color_matrix2_sdqh[9] = {1.278139,  0.031368, -0.189009, 0.283535,  0.677445,  0.098273, -0.009379,  0.622466,  0.432361};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sdqh);
+        }
+            break;
+    }
+    
+    TIFFSetField(tiff_out, TIFFTAG_CALIBRATIONILLUMINANT2, 21); // D65, // added
+    
+    
+    // SD15, StdA
+//    float forward_matrix1_[9] = {1.714980, -2.401556,  1.650795, -0.197052,  0.538726,  0.658326, 1.996839, -6.351043,  5.179405};
+//
+//    TIFFSetField(f_out, TIFFTAG_FORWARDMATRIX1, 9, forward_matrix1_);
+    
+    // SD15, D65
+//      float forward_matrix2_[9] = {1.376607, -1.376272,  0.963883, -0.175388,  1.347596, -0.172208, 1.107507, -3.636357,  3.354051};
+//
+//      TIFFSetField(f_out, TIFFTAG_FORWARDMATRIX2, 9, forward_matrix2_);
+
+    return X3F_OK;
+}
+
 /* extern */
 x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 				      char *outfilename,
@@ -295,7 +381,8 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 				      int denoise,
 				      int apply_sgain,
 				      char *wb,
-				      int compress)
+				      int compress,
+                      x3f_color_profile_t color_profile)
 {
   x3f_return_t ret;
   int fd = open(outfilename, O_RDWR | BINMODE | O_CREAT | O_TRUNC, 0444);
@@ -358,15 +445,17 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 //  ret = write_camera_profiles(x3f, wb, camera_profiles,
 //			      sizeof(camera_profiles)/sizeof(camera_profile_t),
 //			      f_out);
-    ret = write_camera_profiles(x3f, wb, camera_profiles,
-                    1, // only Default profile
-                    f_out);
-  if (ret != X3F_OK) {
-    x3f_printf(ERR, "Could not write camera profiles\n");
-    TIFFClose(f_out);
-    free(image.buf);
-    free(preview.buf);
-    return ret;
+  if (color_profile == PROFILE_EMBED) {
+      ret = write_camera_profiles(x3f, wb, camera_profiles,
+                        1, // only Default profile
+                        f_out);
+      if (ret != X3F_OK) {
+        x3f_printf(ERR, "Could not write camera profiles\n");
+        TIFFClose(f_out);
+        free(image.buf);
+        free(preview.buf);
+        return ret;
+      }
   }
 
   if (!x3f_get_gain(x3f, wb, gain)) {
@@ -391,8 +480,18 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
   x3f_3x1_invert(gain, gain_inv);
   x3f_3x3_diag(gain_inv, gain_inv_mat);
   vec_double_to_float(gain_inv_mat, camera_calibration1, 9);
-  TIFFSetField(f_out, TIFFTAG_CAMERACALIBRATION1, 9, camera_calibration1);
+  if (color_profile == PROFILE_EMBED) {
+      TIFFSetField(f_out, TIFFTAG_CAMERACALIBRATION1, 9, camera_calibration1);
+  }
 
+  ret = write_color_profile(x3f, f_out, color_profile);
+  if (ret != X3F_OK) {
+    x3f_printf(ERR, "Could not write color profile\n");
+    TIFFClose(f_out);
+    free(image.buf);
+    free(preview.buf);
+    return ret;
+  }
 //  for (row=0; row < preview.rows; row++)
 //    TIFFWriteScanline(f_out, preview.data + preview.row_stride*row, row, 0);
 //
