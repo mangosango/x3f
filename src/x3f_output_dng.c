@@ -333,7 +333,7 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
             break;
         case PROFILE_MODEL_SDQH:
         {
-            float color_matrix1_sdqh[9] = {1.187778, -0.177629, -0.077932, 0.324313,  0.432071,  0.135978, 0.074148,  0.409630,  0.418587};
+            float color_matrix1_sdqh[9] = {1.204060, -0.193424, -0.083580, 0.341497,  0.432368,  0.144470, 0.086408,  0.421332,  0.439112};
             TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sdqh);
         }
             break;
@@ -352,7 +352,7 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
             break;
         case PROFILE_MODEL_SDQH:
         {
-            float color_matrix2_sdqh[9] = {1.278139,  0.031368, -0.189009, 0.283535,  0.677445,  0.098273, -0.009379,  0.622466,  0.432361};
+            float color_matrix2_sdqh[9] = {1.223357,  0.027374, -0.178520, 0.287156,  0.648912,  0.100569, 0.000699,  0.612274,  0.432974};
             TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sdqh);
         }
             break;
