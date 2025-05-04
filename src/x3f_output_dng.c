@@ -467,7 +467,9 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
   }
   x3f_3x1_invert(gain, gain_inv);
   vec_double_to_float(gain_inv, as_shot_neutral, 3);
-  TIFFSetField(f_out, TIFFTAG_ASSHOTNEUTRAL, 3, as_shot_neutral);
+  if (color_profile != PROFILE_NONE) {
+      TIFFSetField(f_out, TIFFTAG_ASSHOTNEUTRAL, 3, as_shot_neutral);
+  }
 
 #define WB_D65 "Overcast"
   if (!x3f_get_gain(x3f, WB_D65, gain)) {

@@ -272,6 +272,8 @@ int main(int argc, char *argv[])
     color_profile = PROFILE_EMBED;
       else if (!strcmp(encoding, "calibrated"))
     color_profile = PROFILE_CALIBRATED;
+      else if (!strcmp(encoding, "none"))
+    color_profile = PROFILE_NONE;
       else if (!strcmp(encoding, "dcp")) {
           fprintf(stderr, "TODO: not implemented: %s\n", encoding);
           usage(argv[0]);
