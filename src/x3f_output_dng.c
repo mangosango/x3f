@@ -290,7 +290,7 @@ static x3f_return_t write_camera_profiles(x3f_t *x3f, char *wb,
 
 typedef enum {
     PROFILE_MODEL_SD15=1,
-//    PROFILE_MODEL_DP2Q=2,
+    PROFILE_MODEL_DP2Q=2,
     PROFILE_MODEL_SDQH=3
 } color_profile_model_t;
 
@@ -314,6 +314,8 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
     if (x3f_get_camf_unsigned(x3f, "CAMERAID", &cameraid)) {
         if (cameraid == X3F_CAMERAID_SDQH) {
             model = PROFILE_MODEL_SDQH;
+        } else if (cameraid == X3F_CAMERAID_DP2Q) {
+            model = PROFILE_MODEL_DP2Q;
         }
     }
       
@@ -323,12 +325,18 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
         return X3F_ARGUMENT_ERROR;
     }
     
-    // color matrix 1, StdA
+    // color matrix 1, StdA, tungsten
     switch (model) {
         case PROFILE_MODEL_SD15:
         {
             float color_matrix1_sd15[9] = {1.575339, -0.605818, -0.065272, 0.753385,  0.093570,  0.159122, 0.338864,  0.183074,  0.509481};
             TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sd15);
+        }
+            break;
+        case PROFILE_MODEL_DP2Q:
+        {
+            float color_matrix1_dp2q[9] = {1.106615, -0.086607, -0.084390, 0.295233,  0.502319,  0.156225, 0.061290,  0.484915,  0.474047};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_dp2q);
         }
             break;
         case PROFILE_MODEL_SDQH:
@@ -342,12 +350,18 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
     
     TIFFSetField(tiff_out, TIFFTAG_CALIBRATIONILLUMINANT1, 17); // StdA, // added
     
-    // color matrix 2, D65
+    // color matrix 2, D65, daylight
     switch (model) {
         case PROFILE_MODEL_SD15:
         {
             float color_matrix2_sd15[9] = {1.431427, -0.160064, -0.217438, 0.622291,  0.474456,  0.016736, 0.211198,  0.496788,  0.342864};
             TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sd15);
+        }
+            break;
+        case PROFILE_MODEL_DP2Q:
+        {
+            float color_matrix2_dp2q[9] = {1.124114,  0.109990, -0.178169, 0.206973,  0.715778,  0.110467, -0.068986,  0.665987,  0.444241};
+            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_dp2q);
         }
             break;
         case PROFILE_MODEL_SDQH:
