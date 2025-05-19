@@ -154,6 +154,41 @@ static const camera_profile_t camera_profiles[] = {
   {"Unconverted", get_bmt_to_xyz_noconvert, NULL},
 };
 
+typedef struct {
+    uint16_t iso;
+    float matrix_StdA[9]; // tungsten
+    float matrix_D65[9]; // daylight
+} color_matrix_t;
+
+static const color_matrix_t color_matrices_sd15[] = {
+    {
+        100,
+        {1.575339, -0.605818, -0.065272, 0.753385,  0.093570,  0.159122, 0.338864,  0.183074,  0.509481},
+        {1.431427, -0.160064, -0.217438, 0.622291,  0.474456,  0.016736, 0.211198,  0.496788,  0.342864}
+    }
+};
+
+static const color_matrix_t color_matrices_sdqh[] = {
+    {
+        100,
+        {1.204060, -0.193424, -0.083580, 0.341497,  0.432368,  0.144470, 0.086408,  0.421332,  0.439112},
+        {1.223357,  0.027374, -0.178520, 0.287156,  0.648912,  0.100569, 0.000699,  0.612274,  0.432974}
+    }
+};
+
+static const color_matrix_t color_matrices_dp2q[] = {
+    {
+        100,
+        {1.106615, -0.086607, -0.084390, 0.295233,  0.502319,  0.156225, 0.061290,  0.484915,  0.474047},
+        {1.124114,  0.109990, -0.178169, 0.206973,  0.715778,  0.110467, -0.068986,  0.665987,  0.444241}
+    },
+    {
+        400,
+        {1.256962, -0.294458,  0.038145, 0.383840,  0.361557,  0.277101, 0.125539,  0.359426,  0.610518},
+        {1.054769,  0.118249, -0.165634, 0.195549,  0.681487,  0.114981, -0.060788,  0.642657,  0.458653}
+    }
+};
+
 static int write_camera_profile(x3f_t *x3f, char *wb,
 				const camera_profile_t *profile,
 				TIFF *tiff)
@@ -294,6 +329,26 @@ typedef enum {
     PROFILE_MODEL_SDQH=3
 } color_profile_model_t;
 
+static void write_color_matrix_model(TIFF *tiff_out, const color_matrix_t *matrix, uint8_t count, bool_t illuminant_StdA, double iso)
+{
+    const color_matrix_t* current = &matrix[0];
+    
+    // find nearest iso color matrix
+    for (uint8_t i = 1; i < count; i++) {
+        if (iso == (double)matrix[i].iso) {
+            current = &matrix[i];
+            break;
+        }
+    }
+    x3f_printf(DEBUG, "using color matrix for ISO %d\n", current->iso);
+    
+    if (illuminant_StdA) {
+        TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, &current->matrix_StdA);
+    } else {
+        TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, &current->matrix_D65);
+    }
+}
+
 static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_profile_t color_profile)
 {
     if (color_profile != PROFILE_CALIBRATED) {
@@ -318,10 +373,15 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
             model = PROFILE_MODEL_DP2Q;
         }
     }
-      
     
     if (model == 0) {
         x3f_printf(ERR, "not supported camera model for calibrated color profile.\n");
+        return X3F_ARGUMENT_ERROR;
+    }
+    
+    double capture_iso = 0;
+    if (!x3f_get_camf_float(x3f, "CaptureISO", &capture_iso)) {
+        x3f_printf(ERR, "could not get capture ISO\n");
         return X3F_ARGUMENT_ERROR;
     }
     
@@ -329,20 +389,17 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
     switch (model) {
         case PROFILE_MODEL_SD15:
         {
-            float color_matrix1_sd15[9] = {1.575339, -0.605818, -0.065272, 0.753385,  0.093570,  0.159122, 0.338864,  0.183074,  0.509481};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sd15);
+            write_color_matrix_model(tiff_out, color_matrices_sd15, sizeof(color_matrices_sd15)/sizeof(color_matrix_t), 1, capture_iso);
         }
             break;
         case PROFILE_MODEL_DP2Q:
         {
-            float color_matrix1_dp2q[9] = {1.106615, -0.086607, -0.084390, 0.295233,  0.502319,  0.156225, 0.061290,  0.484915,  0.474047};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_dp2q);
+            write_color_matrix_model(tiff_out, color_matrices_dp2q, sizeof(color_matrices_dp2q)/sizeof(color_matrix_t), 1, capture_iso);
         }
             break;
         case PROFILE_MODEL_SDQH:
         {
-            float color_matrix1_sdqh[9] = {1.204060, -0.193424, -0.083580, 0.341497,  0.432368,  0.144470, 0.086408,  0.421332,  0.439112};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX1, 9, color_matrix1_sdqh);
+            write_color_matrix_model(tiff_out, color_matrices_sdqh, sizeof(color_matrices_sdqh)/sizeof(color_matrix_t), 1, capture_iso);
         }
             break;
     }
@@ -354,20 +411,17 @@ static x3f_return_t write_color_profile(x3f_t *x3f, TIFF *tiff_out, x3f_color_pr
     switch (model) {
         case PROFILE_MODEL_SD15:
         {
-            float color_matrix2_sd15[9] = {1.431427, -0.160064, -0.217438, 0.622291,  0.474456,  0.016736, 0.211198,  0.496788,  0.342864};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sd15);
+            write_color_matrix_model(tiff_out, color_matrices_sd15, sizeof(color_matrices_sd15)/sizeof(color_matrix_t), 0, capture_iso);
         }
             break;
         case PROFILE_MODEL_DP2Q:
         {
-            float color_matrix2_dp2q[9] = {1.124114,  0.109990, -0.178169, 0.206973,  0.715778,  0.110467, -0.068986,  0.665987,  0.444241};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_dp2q);
+            write_color_matrix_model(tiff_out, color_matrices_dp2q, sizeof(color_matrices_dp2q)/sizeof(color_matrix_t), 0, capture_iso);
         }
             break;
         case PROFILE_MODEL_SDQH:
         {
-            float color_matrix2_sdqh[9] = {1.223357,  0.027374, -0.178520, 0.287156,  0.648912,  0.100569, 0.000699,  0.612274,  0.432974};
-            TIFFSetField(tiff_out, TIFFTAG_COLORMATRIX2, 9, color_matrix2_sdqh);
+            write_color_matrix_model(tiff_out, color_matrices_sdqh, sizeof(color_matrices_sdqh)/sizeof(color_matrix_t), 0, capture_iso);
         }
             break;
     }
