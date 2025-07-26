@@ -414,8 +414,55 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
     if (!write_spatial_gain(x3f, &image, wb, f_out))
       x3f_printf(WARN, "Could not get spatial gain\n");
 
-  if (get_camf_rect_as_dngrect(x3f, "ActiveImageArea", &image, 1, active_area))
+  if (get_camf_rect_as_dngrect(x3f, "ActiveImageArea", &image, 1, active_area)) {
     TIFFSetField(f_out, TIFFTAG_ACTIVEAREA, active_area);
+    
+    /* Add DefaultCrop tags to preserve in-camera crop settings */
+    /* Get the embedded JPEG dimensions to determine the crop */
+    x3f_directory_entry_t *thumb_de = x3f_get_thumb_jpeg(x3f);
+    if (thumb_de) {
+      /* Load the JPEG data to get its dimensions */
+      if (x3f_load_data(x3f, thumb_de) == X3F_OK) {
+        x3f_directory_entry_header_t *thumb_deh = &thumb_de->header;
+        x3f_image_data_t *thumb_id = &thumb_deh->data_subsection.image_data;
+        
+        if (thumb_id->columns > 0 && thumb_id->rows > 0) {
+          /* Calculate the crop based on JPEG dimensions vs full image dimensions */
+          float jpeg_aspect = (float)thumb_id->columns / (float)thumb_id->rows;
+          float active_width = (float)(active_area[3] - active_area[1]);
+          float active_height = (float)(active_area[2] - active_area[0]);
+          
+          float crop_width, crop_height;
+          if (jpeg_aspect > (active_width / active_height)) {
+            /* Crop is limited by width */
+            crop_width = active_width;
+            crop_height = crop_width / jpeg_aspect;
+          } else {
+            /* Crop is limited by height */
+            crop_height = active_height;
+            crop_width = crop_height * jpeg_aspect;
+          }
+          
+          /* Center the crop */
+          float crop_origin[2] = {
+            (active_width - crop_width) / 2.0f,
+            (active_height - crop_height) / 2.0f
+          };
+          float crop_size[2] = {
+            crop_width,
+            crop_height
+          };
+          
+          TIFFSetField(f_out, TIFFTAG_DEFAULTCROPORIGIN, crop_origin);
+          TIFFSetField(f_out, TIFFTAG_DEFAULTCROPSIZE, crop_size);
+          
+          x3f_printf(DEBUG, "DefaultCrop from JPEG %dx%d (aspect %.3f): origin=(%f,%f) size=(%f,%f)\n",
+                     thumb_id->columns, thumb_id->rows, jpeg_aspect,
+                     crop_origin[0], crop_origin[1], crop_size[0], crop_size[1]);
+        }
+      }
+    }
+  }
 
   for (row=0; row < image.rows; row++)
     TIFFWriteScanline(f_out, image.data + image.row_stride*row, row, 0);
