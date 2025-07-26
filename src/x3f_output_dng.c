@@ -387,6 +387,10 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
   x3f_3x3_diag(gain_inv, gain_inv_mat);
   vec_double_to_float(gain_inv_mat, camera_calibration1, 9);
   TIFFSetField(f_out, TIFFTAG_CAMERACALIBRATION1, 9, camera_calibration1);
+  
+  /* Add CalibrationIlluminant1 tag - D65 = 21 */
+  uint16_t calibration_illuminant1 = 21;
+  TIFFSetField(f_out, TIFFTAG_CALIBRATIONILLUMINANT1, calibration_illuminant1);
 
   for (row=0; row < preview.rows; row++)
     TIFFWriteScanline(f_out, preview.data + preview.row_stride*row, row, 0);
@@ -405,10 +409,39 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
   TIFFSetField(f_out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_LINEARRAW);
   /* Prevent further chroma denoising in DNG processing software */
   TIFFSetField(f_out, TIFFTAG_CHROMABLURRADIUS, 0.0);
+  
+  /* Add CFAPlaneColor tag for RGB sensor compatibility */
+  uint8_t cfa_plane_color[3] = {0, 1, 2}; /* R, G, B */
+  TIFFSetField(f_out, TIFFTAG_CFAPLANECOLOR, 3, cfa_plane_color);
+  
+  /* Add unique camera model for better recognition */
+  char *camera_make = NULL;
+  char *camera_model = NULL;
+  if (x3f_get_camf_text(x3f, "Make", &camera_make) && 
+      x3f_get_camf_text(x3f, "Model", &camera_model) &&
+      camera_make && camera_model) {
+    char unique_model[256];
+    snprintf(unique_model, sizeof(unique_model), "%s %s", camera_make, camera_model);
+    TIFFSetField(f_out, TIFFTAG_UNIQUECAMERAMODEL, unique_model);
+  }
+  
+  /* Add default scale factors */
+  float default_scale[2] = {1.0, 1.0};
+  TIFFSetField(f_out, TIFFTAG_DEFAULTSCALE, default_scale);
+  
+  /* Add LinearResponseLimit to hint at the maximum linear response */
+  TIFFSetField(f_out, TIFFTAG_LINEARRESPONSELIMIT, 1.0);
+  
+  /* Add AntiAliasStrength to prevent some apps from applying AA filters */
+  TIFFSetField(f_out, TIFFTAG_ANTIALIASSTRENGTH, 0.0);
 
   vec_double_to_float(ilevels.black, black_level, 3);
   TIFFSetField(f_out, TIFFTAG_BLACKLEVEL, 3, black_level);
   TIFFSetField(f_out, TIFFTAG_WHITELEVEL, 3, ilevels.white);
+  
+  /* Add BlackLevelRepeatDim to specify the pattern */
+  uint16_t blacklevel_repeatdim[2] = {1, 1};
+  TIFFSetField(f_out, TIFFTAG_BLACKLEVELREPEATDIM, blacklevel_repeatdim);
 
   if (apply_sgain)
     if (!write_spatial_gain(x3f, &image, wb, f_out))
