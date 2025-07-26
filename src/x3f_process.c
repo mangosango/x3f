@@ -89,12 +89,13 @@ static int get_black_level(x3f_t *x3f,
   {
     char *cammodel;
 
-    if (x3f_get_prop_entry(x3f, "CAMMODEL", &cammodel))
+    if (x3f_get_prop_entry(x3f, "CAMMODEL", &cammodel)) {
       if (!strcmp(cammodel, "SIGMA DP2")) {
         use[BOTTOM] = 0;
       }
-    if (!strcmp(cammodel, "SIGMA DP1 Merrill") || !strcmp(cammodel, "SIGMA DP2 Merrill") || !strcmp(cammodel, "SIGMA DP3 Merrill")) {
-      use[RIGHT] = 0;
+      if (!strcmp(cammodel, "SIGMA DP1 Merrill") || !strcmp(cammodel, "SIGMA DP2 Merrill") || !strcmp(cammodel, "SIGMA DP3 Merrill")) {
+        use[RIGHT] = 0;
+      }
     }
   }
 
