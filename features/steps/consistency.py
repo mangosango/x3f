@@ -17,14 +17,14 @@ def run_conversion(args):
     running_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # suppressing output
     while running_proc.poll() is None:
         time.sleep(0.1)
-    assert running_proc.returncode is 0
+    assert running_proc.returncode == 0
 
 
 @given(u'an input image {image} without a {converted_image}')
 def step_impl(context, image, converted_image):
     assert os.path.isfile(image)
     if os.path.isfile(converted_image):
-        os.chmod(converted_image, 0666)
+        os.chmod(converted_image, 0o666)
         os.remove(converted_image)
 
 
@@ -81,11 +81,11 @@ def step_impl(context, image, output_format):
 @then(u'the {converted_image} has the right {md5} hash value')
 def step_impl(context, converted_image, md5):
     assert os.path.isfile(converted_image)
-    with open(converted_image) as ci:
+    with open(converted_image, 'rb') as ci:
         found_hash = hashlib.md5(ci.read()).hexdigest()
         print("found_hash: ", found_hash, " expected_hash: ", md5)
         assert md5 == found_hash
-    os.chmod(converted_image, 0666)
+    os.chmod(converted_image, 0o666)
     os.remove(converted_image)  # normally, I'd remove this file in the environment
     # however, if these files should always be removed, then remove them immediately after
     # the test should be sufficient.  This should be the last 'then' statement
