@@ -444,21 +444,22 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
           }
           
           /* Center the crop */
-          float crop_origin[2] = {
-            (active_width - crop_width) / 2.0f,
-            (active_height - crop_height) / 2.0f
-          };
-          float crop_size[2] = {
-            crop_width,
-            crop_height
-          };
+          float crop_x = (active_width - crop_width) / 2.0f;
+          float crop_y = (active_height - crop_height) / 2.0f;
           
-          TIFFSetField(f_out, TIFFTAG_DEFAULTCROPORIGIN, crop_origin);
-          TIFFSetField(f_out, TIFFTAG_DEFAULTCROPSIZE, crop_size);
+          /* Calculate DefaultUserCrop as fractions (top, left, bottom, right) */
+          float user_crop[4];
           
-          x3f_printf(DEBUG, "DefaultCrop from JPEG %dx%d (aspect %.3f): origin=(%f,%f) size=(%f,%f)\n",
+          user_crop[0] = crop_y / active_height;                   /* top */
+          user_crop[1] = crop_x / active_width;                    /* left */
+          user_crop[2] = (crop_y + crop_height) / active_height;   /* bottom */
+          user_crop[3] = (crop_x + crop_width) / active_width;     /* right */
+          
+          TIFFSetField(f_out, TIFFTAG_DEFAULTUSERCROP, user_crop);
+          
+          x3f_printf(DEBUG, "DefaultUserCrop from JPEG %dx%d (aspect %.3f): top=%f left=%f bottom=%f right=%f\n",
                      thumb_id->columns, thumb_id->rows, jpeg_aspect,
-                     crop_origin[0], crop_origin[1], crop_size[0], crop_size[1]);
+                     user_crop[0], user_crop[1], user_crop[2], user_crop[3]);
         }
       }
     }
