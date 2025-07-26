@@ -1,3 +1,4 @@
 build/
 venv/
 x3f_test_files/
+.DS_STORE

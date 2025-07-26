@@ -19,7 +19,7 @@ This project uses CMake and Homebrew for dependency management. To build the pro
 
     ```bash
     mkdir build
-    cd buil
+    cd build
     cmake ..
     make
     ```
