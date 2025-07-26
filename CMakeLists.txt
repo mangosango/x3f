@@ -18,13 +18,87 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 file(GLOB OpenCV_STATIC_LIBS "/opt/homebrew/opt/opencv/lib/*.a")
 include_directories(/opt/homebrew/opt/opencv/include/opencv4)
-find_package(ZLIB REQUIRED)
-find_package(TIFF REQUIRED)
-find_package(JPEG REQUIRED)
-find_library(ZSTD_STATIC_LIBRARY NAMES libzstd.a REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LZMA REQUIRED liblzma)
-find_library(TBB_STATIC_LIBRARY NAMES libtbb.a REQUIRED)
+
+if(PORTABLE)
+  # Add Homebrew paths for finding libraries on macOS
+  if(APPLE)
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
+    set(CMAKE_LIBRARY_PATH "/opt/homebrew/lib" "/usr/local/lib" ${CMAKE_LIBRARY_PATH})
+  endif()
+  
+  # For portable builds, use system zlib but static versions of other libraries
+  find_package(ZLIB REQUIRED)  # Use system zlib dynamically
+  
+  find_library(TIFF_STATIC_LIBRARY NAMES libtiff.a tiff.a 
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib
+    REQUIRED)
+  find_library(JPEG_STATIC_LIBRARY NAMES libjpeg.a jpeg.a 
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib
+    REQUIRED)
+  find_library(ZSTD_STATIC_LIBRARY NAMES libzstd.a zstd.a 
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib
+    REQUIRED)
+  find_library(TBB_STATIC_LIBRARY NAMES libtbb.a tbb.a 
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib
+    REQUIRED)
+  find_library(LZMA_STATIC_LIBRARY NAMES liblzma.a lzma.a 
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib
+    REQUIRED)
+  
+  # Additional libtiff dependencies that might be needed
+  find_library(WEBP_STATIC_LIBRARY NAMES libwebp.a webp.a
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib)
+  find_library(JBIG_STATIC_LIBRARY NAMES libjbig.a jbig.a
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib)
+  find_library(DEFLATE_STATIC_LIBRARY NAMES libdeflate.a deflate.a
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib)
+  find_library(SHARPYUV_STATIC_LIBRARY NAMES libsharpyuv.a sharpyuv.a
+    PATHS /opt/homebrew/lib /usr/local/lib /usr/lib
+    PATH_SUFFIXES lib)
+  
+  # Include directories
+  find_path(TIFF_INCLUDE_DIR NAMES tiff.h
+    PATHS /opt/homebrew/include /usr/local/include /usr/include)
+  find_path(JPEG_INCLUDE_DIR NAMES jpeglib.h
+    PATHS /opt/homebrew/include /usr/local/include /usr/include)
+  
+  # Build the TIFF_LIBRARIES with all dependencies
+  set(TIFF_LIBRARIES ${TIFF_STATIC_LIBRARY})
+  if(WEBP_STATIC_LIBRARY)
+    list(APPEND TIFF_LIBRARIES ${WEBP_STATIC_LIBRARY})
+  endif()
+  if(SHARPYUV_STATIC_LIBRARY)
+    list(APPEND TIFF_LIBRARIES ${SHARPYUV_STATIC_LIBRARY})
+  endif()
+  if(JBIG_STATIC_LIBRARY)
+    list(APPEND TIFF_LIBRARIES ${JBIG_STATIC_LIBRARY})
+  endif()
+  if(DEFLATE_STATIC_LIBRARY)
+    list(APPEND TIFF_LIBRARIES ${DEFLATE_STATIC_LIBRARY})
+  endif()
+  
+  set(JPEG_LIBRARIES ${JPEG_STATIC_LIBRARY})
+  # ZLIB_LIBRARIES is already set by find_package(ZLIB)
+  set(LZMA_LIBRARIES ${LZMA_STATIC_LIBRARY})
+else()
+  # For non-portable builds, use standard find_package
+  find_package(ZLIB REQUIRED)
+  find_package(TIFF REQUIRED)
+  find_package(JPEG REQUIRED)
+  find_library(ZSTD_STATIC_LIBRARY NAMES libzstd.a REQUIRED)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(LZMA REQUIRED liblzma)
+  find_library(TBB_STATIC_LIBRARY NAMES libtbb.a REQUIRED)
+endif()
+
 find_package(BLAS REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIRS} ${TIFF_INCLUDE_DIRS} ${JPEG_INCLUDE_DIR} ${ZSTD_INCLUDE_DIR} ${LZMA_INCLUDE_DIRS})

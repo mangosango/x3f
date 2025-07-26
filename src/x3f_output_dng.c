@@ -296,7 +296,7 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 				      int compress)
 {
   x3f_return_t ret;
-  int fd = open(outfilename, O_RDWR | BINMODE | O_CREAT | O_TRUNC, 0444);
+  int fd = open(outfilename, O_RDWR | BINMODE | O_CREAT | O_TRUNC, 0644);
   TIFF *f_out;
   uint64_t sub_ifds[1] = {0};
 
