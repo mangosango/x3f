@@ -8,6 +8,7 @@
  *
  */
 
+#include "x3f_platform.h"
 #include "x3f_version.h"
 #include "x3f_io.h"
 #include "x3f_process.h"
@@ -78,7 +79,9 @@ static void usage(char *progname)
           "   -sgain          Apply spatial gain (default except for Quattro)\n"
           "   -wb <WB>        Select white balance preset\n"
           "   -compress       Enable ZIP compression for DNG and TIFF output\n"
+#if USE_OPENCL
           "   -ocl            Use OpenCL\n"
+#endif
 	  "\n"
 	  "STRANGE STUFF\n"
           "   -offset <OFF>   Offset for SD14 and older\n"
@@ -136,13 +139,7 @@ static int safecat(char *dst, const char *src, int dst_size)
   }
 }
 
-#if defined(_WIN32) || defined(_WIN64)
-#define PATHSEP "\\"
-static const char pathseps[] = PATHSEP "/:";
-#else
-#define PATHSEP "/"
-static const char pathseps[] = PATHSEP;
-#endif
+static const char pathseps[] = PATHSEPS;
 
 static int make_paths(const char *inpath, const char *outdir,
 		      const char *ext,
@@ -262,8 +259,10 @@ int main(int argc, char *argv[])
       wb = argv[++i];
     else if (!strcmp(argv[i], "-compress"))
       compress = 1;
+#if USE_OPENCL
     else if (!strcmp(argv[i], "-ocl"))
       use_opencl = 1;
+#endif
 
   /* Strange Stuff */
     else if ((!strcmp(argv[i], "-offset")) && (i+1)<argc)
@@ -280,7 +279,12 @@ int main(int argc, char *argv[])
     usage(argv[0]);
   }
 
+#if USE_OPENCL
   x3f_set_use_opencl(use_opencl);
+#else
+  /* OpenCL is not available on this platform */
+  (void)use_opencl; /* Suppress unused variable warning */
+#endif
 
   extract_meta =
     file_type == META ||
