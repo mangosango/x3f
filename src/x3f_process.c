@@ -598,6 +598,8 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
   double scale[3], black_level[3], black_dev[3], intermediate_bias;
   int quattro = x3f_image_area_qtop(x3f, &qtop);
   int colors_in = quattro ? 2 : 3;
+    double digital_ISO_Gain[3];
+    int i;
 
   if (!x3f_image_area(x3f, &image) || image.channels < 3) return 0;
   if (quattro && (qtop.channels < 1 ||
@@ -636,9 +638,18 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
   x3f_printf(DEBUG, "max_intermediate = {%u,%u,%u}\n",
 	     ilevels->white[0], ilevels->white[1], ilevels->white[2]);
 
-  for (color = 0; color < 3; color++)
-    scale[color] = (ilevels->white[color] - ilevels->black[color]) /
-      (max_raw[color] - black_level[color]);
+    if (x3f_get_camf_float_vector(x3f, "DigitalISOGain", digital_ISO_Gain)) {
+      x3f_printf(DEBUG, "digital_ISO_Gain = {%f,%f,%f}\n",
+	     digital_ISO_Gain[0], digital_ISO_Gain[1], digital_ISO_Gain[2]);
+    } else {
+      for (i = 0; i < 3; i ++) {
+          digital_ISO_Gain[i] = 1.0;
+      }
+    }
+
+    for (color = 0; color < 3; color++) {
+        scale[color] = ((ilevels->white[color] - ilevels->black[color]) / (max_raw[color] - black_level[color])) * digital_ISO_Gain[color]; 
+    }
 
   /* Preprocess image data (HUF/TRU->x3rgb16) */
   for (row = 0; row < image.rows; row++)
