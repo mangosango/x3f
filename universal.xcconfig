@@ -1,0 +1,14 @@
+// Architecture-specific library search paths
+LIBRARY_SEARCH_PATHS[arch=arm64] = /opt/homebrew/lib
+LIBRARY_SEARCH_PATHS[arch=x86_64] = /usr/local/lib
+
+// Architecture-specific header search paths  
+HEADER_SEARCH_PATHS[arch=arm64] = /opt/homebrew/include
+HEADER_SEARCH_PATHS[arch=x86_64] = /usr/local/include
+
+// Build for both architectures
+ARCHS = x86_64 arm64
+ONLY_ACTIVE_ARCH = NO
+
+// Ensure we're building a universal binary
+VALID_ARCHS = x86_64 arm64

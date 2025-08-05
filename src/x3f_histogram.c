@@ -9,7 +9,6 @@
 
 #include "x3f_histogram.h"
 #include "x3f_process.h"
-#include "x3f_image.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,8 +51,6 @@ x3f_return_t x3f_dump_raw_data_as_histogram(x3f_t *x3f,
   int color, i;
   int row;
   uint16_t max = 0;
-    
-//    printf("color encoding %d\n", encoding);
 
   if (f_out == NULL) return X3F_OUTFILE_ERROR;
 
@@ -64,19 +61,6 @@ x3f_return_t x3f_dump_raw_data_as_histogram(x3f_t *x3f,
     fclose(f_out);
     return X3F_ARGUMENT_ERROR;
   }
-    
-    // get qtop image
-    x3f_area16_t qtop; // original
-    x3f_area16_t qtop_image; // active area
-    int hasQtop = 0;
-    if (x3f_image_area_qtop(x3f, &qtop)) {
-        hasQtop = 1;
-        if (!x3f_crop_area_camf(x3f, "ActiveImageArea", &qtop, 0, &qtop_image)) {
-            fclose(f_out);
-            return X3F_INTERNAL_ERROR;
-        }
-        printf("has qtop image, original %d, %d, crop %d, %d, channels %d\n", qtop.rows, qtop.columns, qtop_image.rows, qtop_image.columns, qtop_image.channels);
-    }
 
   for (color=0; color < 3; color++)
     histogram[color] = (uint32_t *)calloc(1<<16, sizeof(uint32_t));
@@ -85,7 +69,7 @@ x3f_return_t x3f_dump_raw_data_as_histogram(x3f_t *x3f,
     int col;
 
     for (col=0; col < image.columns; col++)
-        for (color=0; color < (hasQtop ? 2 : 3); color++) {
+      for (color=0; color < 3; color++) {
 	uint16_t val =
 	  image.data[image.row_stride*row + image.channels*col + color];
 
@@ -96,24 +80,6 @@ x3f_return_t x3f_dump_raw_data_as_histogram(x3f_t *x3f,
 	if (val > max) max = val;
       }
   }
-    
-    if (hasQtop && encoding == UNPROCESSED) {
-        for (row=0; row < qtop_image.rows; row++) {
-          int col;
-          for (col=0; col < qtop_image.columns; col++) {
-          uint16_t val =
-              qtop_image.data[qtop_image.row_stride*row + qtop_image.channels*col + 0];
-                
-          if (log_hist)
-            val = ilog(val, BASE, STEPS);
-
-          histogram[2][val]++; // blue channel
-          if (val > max) max = val;
-            }
-        }
-    }
-    
-//    printf("hist max %d\n", max);
 
   for (i=0; i <= max; i++) {
     uint32_t val[3];

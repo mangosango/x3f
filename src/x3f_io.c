@@ -1160,8 +1160,7 @@ static char *utf16le_to_utf8(utf16_t *str)
   ibuf = (char *)str;
   obuf = buf;
 
-  int ret = iconv(ic, &ibuf, &isize, &obuf, &osize);
-  assert(ret != -1);
+  assert(iconv(ic, &ibuf, &isize, &obuf, &osize) != -1);
   *obuf = 0;
 
   iconv_close(ic);

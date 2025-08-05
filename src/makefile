@@ -41,8 +41,8 @@ ifeq (linux, $(TARGET_SYS))
 else
 ifeq (osx, $(TARGET_SYS))
   EXE =
-  CFBASE = $(SDKFLAGS) -Wno-pragmas
-  LDBASE = $(SDKFLAGS) -Wl,-dead_strip_dylibs -liconv -framework OpenCL
+  CFBASE = $(SDKFLAGS) -Wno-pragmas -arch x86_64 -arch arm64
+  LDBASE = $(SDKFLAGS) -Wl,-dead_strip_dylibs -liconv -framework OpenCL -framework Accelerate -arch x86_64 -arch arm64
   AUXOBJS =
 else
 	OSOCV =
@@ -59,17 +59,17 @@ OCV = ../deps/lib/$(TARGET)/opencv
 
 ZLIB =
 ifneq ($(TARGET_SYS), linux)
-ZLIB = $(OCV)/share/OpenCV/3rdparty/$(OCV_LIB)/libzlib.a
+ZLIB =
 endif
-OCV_AUX = $(OCV)/share/OpenCV/3rdparty/$(OCV_LIB)/libtbb.a $(ZLIB)
+OCV_AUX = $(ZLIB)
 
-OCV_CFLAGS = -I$(OCV)/include
+OCV_CFLAGS = -I$(OCV)/include/opencv4
 OCV_LIBS = $(addprefix $(OCV)/lib/libopencv_,photo.a imgproc.a core.a) $(OCV_AUX)
 
 TIFF_INC1 = ../deps/src/opencv/3rdparty/libtiff
-TIFF_INC2 = ../deps/src/$(TARGET)/opencv_build/3rdparty/libtiff
+TIFF_INC2 = ../deps/src/build/x86_64/3rdparty/libtiff
 TIFF_CFLAGS = -I$(TIFF_INC1) -I$(TIFF_INC2)
-TIFF_LIBS = $(OCV)/share/OpenCV/3rdparty/$(OCV_LIB)/liblibtiff.a $(ZLIB)
+TIFF_LIBS = ../deps/src/build/liblibtiff-universal.a
 
 CFLAGS = $(CFBASE) $(TIFF_CFLAGS) -g -O3 -Wall $(C)
 CXXFLAGS = $(CFLAGS) $(OCV_CFLAGS) -fvisibility-inlines-hidden
@@ -86,26 +86,16 @@ VERSION_O = x3f_version-$(VERSION).o
 
 all: $(addprefix $(BINDIR)/,$(PROGS))
 
-ifeq ($(TARGET), osx-universal)
-
-$(BINDIR)/%: ../bin/osx-x86_64/% ../bin/osx-i386/% | $(BINDIR)
-	$(LIPO) -create -output $@ $^
-
-.PHONY: force
-
-.SECONDARY: $(addprefix ../bin/osx-x86_64/,$(PROGS))
-../bin/osx-x86_64/%: force
-	$(MAKE) TARGET=osx-x86_64 $@
-
-.SECONDARY: $(addprefix ../bin/osx-i386/,$(PROGS))
-../bin/osx-i386/%: force
-	$(MAKE) TARGET=osx-i386 $@
-
-else
-
 -include $(BINDIR)/*.d
 
-$(BINDIR)/x3f_extract$(EXE): $(addprefix $(BINDIR)/,x3f_extract.o $(VERSION_O) x3f_io.o x3f_process.o x3f_meta.o x3f_image.o x3f_spatial_gain.o x3f_output_dng.o x3f_output_tiff.o x3f_output_ppm.o x3f_histogram.o x3f_print_meta.o x3f_dump.o x3f_matrix.o x3f_dngtags.o x3f_denoise_utils.o x3f_denoise_aniso.o x3f_denoise.o x3f_printf.o $(AUXOBJS)) $(OCV_LIBS) $(TIFF_LIBS)
+# tegra_hal only exists for arm64, so we need to handle it specially
+ifeq (osx, $(TARGET_SYS))
+TEGRA_HAL = ../deps/src/build/arm64/3rdparty/lib/libtegra_hal.a
+else
+TEGRA_HAL =
+endif
+
+$(BINDIR)/x3f_extract$(EXE): $(addprefix $(BINDIR)/,x3f_extract.o $(VERSION_O) x3f_io.o x3f_process.o x3f_meta.o x3f_image.o x3f_spatial_gain.o x3f_output_dng.o x3f_output_tiff.o x3f_output_ppm.o x3f_histogram.o x3f_print_meta.o x3f_dump.o x3f_matrix.o x3f_dngtags.o x3f_denoise_utils.o x3f_denoise_aniso.o x3f_denoise.o x3f_printf.o $(AUXOBJS)) $(OCV_LIBS) $(TIFF_LIBS) ../deps/src/build/liblibjpeg-turbo-universal.a ../deps/src/build/libittnotify-universal.a ../deps/src/build/libzlib-universal.a $(TEGRA_HAL)
 	$(CXX) $^ -o $@ $(LDFLAGS) -lm
 
 $(BINDIR)/x3f_io_test$(EXE): $(addprefix $(BINDIR)/,x3f_io_test.o $(VERSION_O) x3f_io.o x3f_print_meta.o x3f_printf.o $(AUXOBJS))
@@ -123,9 +113,7 @@ $(BINDIR)/%.o: %.cpp | $(BINDIR)
 #
 
 $(BINDIR)/$(VERSION_O): x3f_version.c | $(BINDIR)
-	$(CC) -DVERSION=\"$(VERSION)\" $< -c -MD -o $@
-
-endif
+	$(CC) $(CFLAGS) -DVERSION=\"$(VERSION)\" $< -c -MD -o $@
 
 $(BINDIR):
 	mkdir $(BINDIR)

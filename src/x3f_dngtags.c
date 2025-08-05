@@ -38,6 +38,8 @@ static void tag_extender(TIFF *tiff)
      "ForwardMatrix1"},
     {TIFFTAG_FORWARDMATRIX2, -1, -1, TIFF_SRATIONAL, FIELD_CUSTOM, 1, 1,
      "ForwardMatrix2"},
+    {TIFFTAG_DEFAULTUSERCROP, 4, 4, TIFF_FLOAT, FIELD_CUSTOM, 1, 0,
+     "DefaultUserCrop"},
   };
 
   TIFFMergeFieldInfo(tiff, tags, sizeof(tags)/sizeof(tags[0]));

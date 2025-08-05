@@ -1,94 +1,95 @@
 #!/bin/bash
 
-if [ -z $1 ]; then
-    echo usage $0 "<TARGET> [<cmake toolchain file>]"
-    echo Please run '"make"'
-    exit 1
-else
-    TARGET=$1
-fi
+set -e
 
-CORES=`nproc 2>/dev/null`
-if [ $? -eq 0 ]; then
-    echo Detected $CORES cores
-else
-    CORES=4
-    echo Unable to detect number of cores, assuming $CORES
-fi
+# Architectures to build
+ARCHS="x86_64 arm64"
 
+# Common settings
 ROOT=$PWD
 SRC=$ROOT/deps/src
-LIB=$ROOT/deps/lib/$TARGET
-
+UNIVERSAL_LIB_DIR=$ROOT/deps/lib/osx-universal
 OCV_SRC=$SRC/opencv
-OCV_BLD=$SRC/$TARGET/opencv_build
-OCV_LIB=$LIB/opencv
-
 OCV_URL=https://github.com/opencv/opencv.git
-OCV_HASH=83391ac59d270f2148fc99a62ae279b04d37f5d0
+OCV_HASH=4.5.5
 
-OCV_FLAGS="-D CMAKE_BUILD_TYPE=RELEASE -D BUILD_SHARED_LIBS=OFF \
-           -D WITH_IPP=OFF -D WITH_TBB=ON -D BUILD_TBB=ON -D WITH_ITT=OFF \
-           -D BUILD_TIFF=ON -D WITH_JPEG=OFF -D WITH_JASPER=OFF \
-           -D WITH_PNG=OFF -D WITH_WEBP=OFF -D WITH_OPENEXR=OFF \
-           -D BUILD_TESTS=OFF -D BUILD_PERF_TESTS=OFF -D BUILD_DOCS=OFF \
-           -D BUILD_opencv_python2=OFF -D BUILD_opencv_python3=OFF \
-           -D BUILD_opencv_java=OFF -D BUILD_opencv_apps=OFF"
-OPENCV_EXTRA_FLAGS=
+# Clean up old builds
+rm -rf $SRC/build
+rm -rf $UNIVERSAL_LIB_DIR
 
-if [[ $TARGET =~ ^osx- ]]; then
-    if [ `uname -s` = Darwin ]; then
-	OPENCV_EXTRA_FLAGS="$OPENCV_EXTRA_FLAGS \
-                            -isysroot /Developer/SDKs/MacOSX10.9.sdk"
-    else
-	# APPLE and UNIX are not defined automatically when cross-compiling
-	OCV_FLAGS="$OCV_FLAGS -D APPLE=1 -D UNIX=1"
-	# Precompiled headers do not work with OSXCross
-        OCV_FLAGS="$OCV_FLAGS -D ENABLE_PRECOMPILED_HEADERS=OFF"
-	# Workaround for cmake bug
-	mkdir -p $SRC/cmake_workaround || exit 1
-	TOOL=x86_64-apple-darwin11-install_name_tool
-	TOOL_PATH=`which $TOOL` || {
-	    echo Could not find $TOOL
-	    echo Make sure to run '`osxcross-env`' to set PATH
-	    exit 1
-	}
-	ln -fs $TOOL_PATH $SRC/cmake_workaround/install_name_tool || exit 1
-	PATH="$PATH:$SRC/cmake_workaround"
+# Clone or update OpenCV source
+if [ -d "$OCV_SRC" ]; then
+    echo "Fetching OpenCV"
+    cd $OCV_SRC
+    git fetch
+else
+    echo "Cloning OpenCV"
+    mkdir -p $SRC
+    git clone $OCV_URL $OCV_SRC
+    cd $OCV_SRC
+fi
+
+git checkout $OCV_HASH
+
+# Patch zutil.h to avoid fdopen macro conflict
+sed -i.bak 's/#        define fdopen(fd,mode) NULL \/\* No fdopen() \*\//\/\* #        define fdopen(fd,mode) NULL \/\* No fdopen() \*\//' 3rdparty/zlib/zutil.h
+# Patch pngpriv.h to avoid fp.h include error
+sed -i.bak 's/#      include <fp.h>/ \/\*#      include <fp.h>\*\//' 3rdparty/libpng/pngpriv.h
+
+# Build each architecture
+for ARCH in $ARCHS; do
+    BUILD_DIR=$SRC/build/$ARCH
+    INSTALL_DIR=$SRC/install/$ARCH
+
+    echo "Building for $ARCH"
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+
+    cmake -G "Unix Makefiles" \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D CMAKE_OSX_ARCHITECTURES=$ARCH \
+        -D BUILD_SHARED_LIBS=OFF \
+        -D BUILD_opencv_apps=OFF \
+        -D BUILD_TESTS=OFF \
+        -D BUILD_PERF_TESTS=OFF \
+        -D WITH_OPENCL=OFF \
+        -D WITH_IPP=OFF \
+        -D BUILD_TIFF=ON \
+        -D WITH_PNG=OFF \
+        -D BUILD_opencv_videoio=OFF \
+        -D BUILD_opencv_python=OFF \
+        -D BUILD_opencv_python2=OFF \
+        -D BUILD_opencv_python3=OFF \
+        -D CMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+        $OCV_SRC
+
+    make -j$(sysctl -n hw.ncpu)
+    make install
+done
+
+# Create universal libraries
+echo "Creating universal libraries"
+UNIVERSAL_INSTALL_DIR=$UNIVERSAL_LIB_DIR/opencv
+mkdir -p $UNIVERSAL_INSTALL_DIR/lib
+mkdir -p $UNIVERSAL_INSTALL_DIR/include
+
+# Combine libraries with lipo
+for LIB in $SRC/install/x86_64/lib/*.a; do
+    LIB_NAME=$(basename $LIB)
+    if [ -f "$SRC/install/arm64/lib/$LIB_NAME" ]; then
+        lipo -create \
+            $SRC/install/x86_64/lib/$LIB_NAME \
+            $SRC/install/arm64/lib/$LIB_NAME \
+            -output $UNIVERSAL_INSTALL_DIR/lib/$LIB_NAME
     fi
-    OPENCV_EXTRA_FLAGS="$OPENCV_EXTRA_FLAGS -mmacosx-version-min=10.9 \
-                        -arch `echo $TARGET | sed 's/^osx-//'` -Wno-pragmas"
-fi
+done
 
-if [[ $TARGET =~ ^windows- ]]; then
-    OCV_FLAGS="$OCV_FLAGS -D BUILD_ZLIB=ON \
-                          -D OPENCV_EXTRA_CXX_FLAGS=-DUSE_WINTHREAD"
-else
-    OCV_FLAGS="$OCV_FLAGS -D OPENCV_EXTRA_CXX_FLAGS=-DUSE_PTHREAD"
-fi
+ls -l $UNIVERSAL_INSTALL_DIR/lib
 
-if [ -n "$2" ]; then
-    OCV_FLAGS="$OCV_FLAGS -D CMAKE_TOOLCHAIN_FILE=$ROOT/$2"
-fi
+# Copy headers
+cp -R $SRC/install/x86_64/include/opencv4 $UNIVERSAL_INSTALL_DIR/include/
 
-if [ -e $OCV_SRC ]; then
-    echo Fetch opencv
-    cd $OCV_SRC || exit 1
-    git fetch || exit 1
-else
-    echo Clone opencv
-    mkdir -p $SRC || exit 1
-    git clone $OCV_URL $OCV_SRC || exit 1
-    cd $OCV_SRC || exit 1
-fi
+# Create a success marker
+touch $UNIVERSAL_INSTALL_DIR/.success
 
-echo Build Opencv
-git checkout $OCV_HASH || exit 1
-mkdir -p $OCV_BLD || exit 1
-mkdir -p $OCV_LIB || exit 1
-cd $OCV_BLD || exit 1
-cmake $OCV_FLAGS -D OPENCV_EXTRA_FLAGS="$OPENCV_EXTRA_FLAGS" \
-      -D CMAKE_INSTALL_PREFIX=$OCV_LIB $OCV_SRC || exit 1
-make -j $CORES install || exit 1
-touch $OCV_LIB/.success || exit 1
-echo Successfully installed OpenCV in $OCV_LIB
+echo "Successfully built and installed universal OpenCV libraries."

@@ -1,5 +1,6 @@
 bin/
-deps/
+deps/lib/
+deps/src/
 dist/
 *~
 a.out
