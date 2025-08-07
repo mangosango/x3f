@@ -83,7 +83,7 @@ static int get_black_level(x3f_t *x3f,
 
   /* Workaround for bug in DP2 firmware. DarkShieldBottom is specified incorrectly and thus ignored.
    *
-   * Also, a workaround for the bright "shielded" region on the right for the DP1M, DP2M, and DP3M.
+   * Also, a workaround for the bright "shielded" region on the right for the DP1M, DP2M, DP3M, and SD1M.
    * See https://github.com/Kalpanika/x3f/issues/117
    * */
   {
@@ -93,8 +93,10 @@ static int get_black_level(x3f_t *x3f,
       if (!strcmp(cammodel, "SIGMA DP2")) {
         use[BOTTOM] = 0;
       }
-      if (!strcmp(cammodel, "SIGMA DP1 Merrill") || !strcmp(cammodel, "SIGMA DP2 Merrill") || !strcmp(cammodel, "SIGMA DP3 Merrill")) {
-        use[RIGHT] = 0;
+      /* Skip column areas for all Merrill models - they share the same sensor architecture
+       * and column-based dark areas appear to cause color cast issues */
+      if (!strcmp(cammodel, "SIGMA DP1 Merrill") || !strcmp(cammodel, "SIGMA DP2 Merrill") || !strcmp(cammodel, "SIGMA DP3 Merrill") || !strcmp(cammodel, "SIGMA SD1 Merrill")) {
+        use[RIGHT] = 0;  /* Skip RIGHT column */
       }
     }
   }
@@ -104,9 +106,11 @@ static int get_black_level(x3f_t *x3f,
   {
     uint32_t cameraid;
 
-    if (x3f_get_camf_unsigned(x3f, "CAMERAID", &cameraid))
-      if (cameraid == X3F_CAMERAID_SDQH)
-	use[BOTTOM] = 0;
+    if (x3f_get_camf_unsigned(x3f, "CAMERAID", &cameraid)) {
+      if (cameraid == X3F_CAMERAID_SDQH) {
+        use[BOTTOM] = 0;
+      }
+    }
   }
 
   /* Real CAMF rects */
@@ -598,7 +602,7 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
   double scale[3], black_level[3], black_dev[3], intermediate_bias;
   int quattro = x3f_image_area_qtop(x3f, &qtop);
   int colors_in = quattro ? 2 : 3;
-    double digital_ISO_Gain[3];
+    double digital_ISO_Gain[3] = {1.0, 1.0, 1.0};
     int i;
 
   if (!x3f_image_area(x3f, &image) || image.channels < 3) return 0;
@@ -638,12 +642,30 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
   x3f_printf(DEBUG, "max_intermediate = {%u,%u,%u}\n",
 	     ilevels->white[0], ilevels->white[1], ilevels->white[2]);
 
-    if (x3f_get_camf_float_vector(x3f, "DigitalISOGain", digital_ISO_Gain)) {
+    /* Check if this is a Merrill model - skip DigitalISOGain to avoid color cast issues */
+    int is_merrill = 0;
+    {
+      char *cammodel;
+      if (x3f_get_prop_entry(x3f, "CAMMODEL", &cammodel)) {
+        if (!strcmp(cammodel, "SIGMA DP1 Merrill") || 
+            !strcmp(cammodel, "SIGMA DP2 Merrill") || 
+            !strcmp(cammodel, "SIGMA DP3 Merrill") || 
+            !strcmp(cammodel, "SIGMA SD1 Merrill")) {
+          is_merrill = 1;
+          x3f_printf(DEBUG, "Merrill model detected, skipping DigitalISOGain\n");
+        }
+      }
+    }
+
+    if (!is_merrill && x3f_get_camf_float_vector(x3f, "DigitalISOGain", digital_ISO_Gain)) {
       x3f_printf(DEBUG, "digital_ISO_Gain = {%f,%f,%f}\n",
 	     digital_ISO_Gain[0], digital_ISO_Gain[1], digital_ISO_Gain[2]);
     } else {
       for (i = 0; i < 3; i ++) {
           digital_ISO_Gain[i] = 1.0;
+      }
+      if (is_merrill) {
+        x3f_printf(DEBUG, "Using digital_ISO_Gain = {1.0,1.0,1.0} for Merrill model\n");
       }
     }
 
