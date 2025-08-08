@@ -45,6 +45,10 @@ x3f_return_t x3f_dump_raw_data_as_tiff(x3f_t *x3f,
   TIFFSetField(f_out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
   TIFFSetField(f_out, TIFFTAG_COMPRESSION,
 	       compress ? COMPRESSION_DEFLATE : COMPRESSION_NONE);
+  if (compress) {
+    /* Use horizontal predictor for better compression of image data */
+    TIFFSetField(f_out, TIFFTAG_PREDICTOR, 2);
+  }
   TIFFSetField(f_out, TIFFTAG_PHOTOMETRIC, image.channels == 1 ?
 	       PHOTOMETRIC_MINISBLACK : PHOTOMETRIC_RGB);
   TIFFSetField(f_out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
