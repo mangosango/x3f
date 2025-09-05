@@ -25,6 +25,10 @@
 #include <string.h>
 #include <assert.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static void vec_double_to_float(double *a, float *b, int len)
 {
   int i;
@@ -132,6 +136,8 @@ typedef struct {
   char *name;
   int (*get_bmt_to_xyz)(x3f_t *x3f, char *wb, double *raw_to_xyz);
   double *grayscale_mix;
+  char *x3f_profile_name;  /* Name of corresponding X3F profile (e.g., "CMCM_Standard") */
+  double contrast_adj;      /* Contrast adjustment from X3F */
 } camera_profile_t;
 
 /* TODO: more mixes should be defined */
@@ -146,12 +152,184 @@ static int get_bmt_to_xyz_noconvert(x3f_t *x3f, char *wb, double *bmt_to_xyz)
   return 1;
 }
 
+/* Extract X3F picture profile color matrix */
+static int get_x3f_profile_color_matrix(x3f_t *x3f, const char *profile_name, double *matrix)
+{
+  char matrix_name[256];
+  snprintf(matrix_name, sizeof(matrix_name), "CMCM_%s", profile_name);
+  
+  double *cmcm = NULL;
+  int dim0, dim1, dim2;
+  if (x3f_get_camf_matrix_var(x3f, matrix_name, &dim0, &dim1, &dim2, 
+                              M_FLOAT, (void**)&cmcm) && 
+      dim0 == 3 && dim1 == 3) {
+    memcpy(matrix, cmcm, 9 * sizeof(double));
+    free(cmcm);
+    return 1;
+  }
+  
+  if (cmcm) free(cmcm);
+  return 0;
+}
+
+/* Extract X3F picture profile contrast compensation */
+static int get_x3f_profile_contrast(x3f_t *x3f, const char *profile_name, double *contrast)
+{
+  char contrast_name[256];
+  snprintf(contrast_name, sizeof(contrast_name), "CMCC_%s", profile_name);
+  
+  double *cmcc = NULL;
+  int dim0, dim1, dim2;
+  if (x3f_get_camf_matrix_var(x3f, contrast_name, &dim0, &dim1, &dim2,
+                              M_FLOAT, (void**)&cmcc) && 
+      dim0 == 1 && dim1 == 1) {
+    *contrast = cmcc[0];
+    free(cmcc);
+    return 1;
+  }
+  
+  if (cmcc) free(cmcc);
+  *contrast = 0.0;
+  return 0;
+}
+
+/* Generate a simple tone curve based on contrast adjustment */
+static void generate_tone_curve(double contrast_adj, float *curve, int points)
+{
+  int i;
+  double gamma = 1.0;
+  
+  /* Adjust gamma based on contrast compensation */
+  if (contrast_adj > 0) {
+    gamma = 1.0 / (1.0 + contrast_adj * 0.5);  /* Increase contrast */
+  } else if (contrast_adj < 0) {
+    gamma = 1.0 - contrast_adj * 0.3;  /* Decrease contrast */
+  }
+  
+  /* Generate curve points */
+  for (i = 0; i < points; i++) {
+    double x = (double)i / (points - 1);
+    double y = pow(x, gamma);
+    
+    /* Apply subtle S-curve for more natural contrast */
+    if (contrast_adj != 0) {
+      double s = contrast_adj * 0.15;
+      y = y + s * sin(M_PI * x) * (1.0 - x) * x;
+    }
+    
+    /* Clamp to valid range */
+    if (y < 0.0) y = 0.0;
+    if (y > 1.0) y = 1.0;
+    
+    curve[i * 2] = x;
+    curve[i * 2 + 1] = y;
+  }
+}
+
+/* Get picture profile-specific color matrix */
+static int get_profile_bmt_to_xyz(x3f_t *x3f, char *wb, const char *profile_name, double *bmt_to_xyz)
+{
+  double base_matrix[9];
+  double profile_matrix[9];
+  double result[9];
+  
+  /* Get base color transformation */
+  if (!x3f_get_bmt_to_xyz(x3f, wb, base_matrix))
+    return 0;
+  
+  /* Get profile-specific color matrix compensation */
+  if (get_x3f_profile_color_matrix(x3f, profile_name, profile_matrix)) {
+    /* The X3F profile matrix operates in camera RGB space, not XYZ space.
+     * We need to apply it as: XYZ = base_to_xyz * profile_matrix * RGB
+     * This means: bmt_to_xyz = base_matrix * profile_matrix */
+    x3f_3x3_3x3_mul(base_matrix, profile_matrix, result);
+    memcpy(bmt_to_xyz, result, 9 * sizeof(double));
+  } else {
+    /* Use base matrix if no profile compensation found */
+    memcpy(bmt_to_xyz, base_matrix, 9 * sizeof(double));
+  }
+  
+  return 1;
+}
+
+/* Wrapper functions for each picture profile */
+static int get_bmt_to_xyz_standard(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Standard", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_vivid(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Vivid", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_neutral(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Neutral", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_portrait(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Portrait", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_landscape(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Landscape", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_fcblue(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "FCBlue", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_fcyellow(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "FCYellow", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_cinema(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "Cinema", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_forestgreen(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "ForestGreen", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_sunsetred(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  return get_profile_bmt_to_xyz(x3f, wb, "SunsetRed", bmt_to_xyz);
+}
+
+static int get_bmt_to_xyz_monochrome(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  double matrix[9];
+  if (!get_profile_bmt_to_xyz(x3f, wb, "Monochrome", matrix))
+    return 0;
+  /* For monochrome, we need to ensure grayscale output */
+  memcpy(bmt_to_xyz, matrix, 9 * sizeof(double));
+  return 1;
+}
+
 static const camera_profile_t camera_profiles[] = {
-  {"Default", x3f_get_bmt_to_xyz, NULL},
-  {"Grayscale", get_bmt_to_xyz_noconvert, grayscale_mix_std},
-  {"Grayscale (red filter)", get_bmt_to_xyz_noconvert, grayscale_mix_red},
-  {"Grayscale (blue filter)", get_bmt_to_xyz_noconvert, grayscale_mix_blue},
-  {"Unconverted", get_bmt_to_xyz_noconvert, NULL},
+  {"Standard", get_bmt_to_xyz_standard, NULL, "Standard", 0.0},
+  {"Vivid", get_bmt_to_xyz_vivid, NULL, "Vivid", 0.3},
+  {"Neutral", get_bmt_to_xyz_neutral, NULL, "Neutral", -0.3},
+  {"Portrait", get_bmt_to_xyz_portrait, NULL, "Portrait", -0.25},
+  {"Landscape", get_bmt_to_xyz_landscape, NULL, "Landscape", 0.25},
+  {"FCBlue", get_bmt_to_xyz_fcblue, NULL, "FCBlue", 0.3},
+  {"FCYellow", get_bmt_to_xyz_fcyellow, NULL, "FCYellow", 0.0},
+  {"Cinema", get_bmt_to_xyz_cinema, NULL, "Cinema", 0.0},
+  {"ForestGreen", get_bmt_to_xyz_forestgreen, NULL, "ForestGreen", 0.0},
+  {"SunsetRed", get_bmt_to_xyz_sunsetred, NULL, "SunsetRed", 0.0},
+  {"Monochrome", get_bmt_to_xyz_monochrome, grayscale_mix_std, "Monochrome", 0.0},
+  {"Default", x3f_get_bmt_to_xyz, NULL, NULL, 0.0},
+  {"Grayscale", get_bmt_to_xyz_noconvert, grayscale_mix_std, NULL, 0.0},
+  {"Grayscale (red filter)", get_bmt_to_xyz_noconvert, grayscale_mix_red, NULL, 0.0},
+  {"Grayscale (blue filter)", get_bmt_to_xyz_noconvert, grayscale_mix_blue, NULL, 0.0},
+  {"Unconverted", get_bmt_to_xyz_noconvert, NULL, NULL, 0.0},
 };
 
 static int write_camera_profile(x3f_t *x3f, char *wb,
@@ -188,11 +366,56 @@ static int write_camera_profile(x3f_t *x3f, char *wb,
   vec_double_to_float(bmt_to_d50, forward_matrix1, 9);
   TIFFSetField(tiff, TIFFTAG_FORWARDMATRIX1, 9, forward_matrix1);
 
+  /* Add tone curve if profile has contrast adjustment */
+  if (profile->x3f_profile_name) {
+    double contrast_adj = 0.0;
+    
+    /* Try to get actual contrast value from X3F metadata */
+    if (get_x3f_profile_contrast(x3f, profile->x3f_profile_name, &contrast_adj) || 
+        profile->contrast_adj != 0.0) {
+      
+      /* Use profile default if we couldn't get from metadata */
+      if (contrast_adj == 0.0) {
+        contrast_adj = profile->contrast_adj;
+      }
+      
+      /* Generate and write tone curve */
+      const int curve_points = 256;
+      float *tone_curve = (float*)alloca(curve_points * 2 * sizeof(float));
+      generate_tone_curve(contrast_adj, tone_curve, curve_points);
+      
+      TIFFSetField(tiff, TIFFTAG_PROFILETONECURVE, curve_points * 2, tone_curve);
+    }
+  }
+
   TIFFSetField(tiff, TIFFTAG_PROFILENAME, profile->name);
   /* Tell the raw converter to refrain from clipping the dark areas */
   TIFFSetField(tiff, TIFFTAG_DEFAULTBLACKRENDER, 1);
 
   return 1;
+}
+
+/* Get the active picture mode from X3F metadata */
+static const char* get_active_picture_mode(x3f_t *x3f)
+{
+  /* Check for PictureMode in PROP metadata */
+  char *picture_mode = NULL;
+  if (x3f_get_prop_entry(x3f, "PictureMode", &picture_mode) && picture_mode) {
+    return picture_mode;
+  }
+  
+  /* Check for ColorMode in CAMF metadata */
+  if (x3f_get_camf_text(x3f, "ColorMode", &picture_mode) && picture_mode) {
+    return picture_mode;
+  }
+  
+  /* Check for PICTUREMODE in CAMF metadata */
+  if (x3f_get_camf_text(x3f, "PICTUREMODE", &picture_mode) && picture_mode) {
+    return picture_mode;
+  }
+  
+  /* Default to Standard if not found */
+  return "Standard";
 }
 
 #if defined(_WIN32) || defined (_WIN64)
@@ -353,7 +576,34 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
     TIFFSetField(f_out, TIFFTAG_BASELINEEXPOSURE, baseline_exposure);
   }
 
-  ret = write_camera_profiles(x3f, wb, camera_profiles,
+  /* Determine which picture profile was active */
+  const char *active_mode = get_active_picture_mode(x3f);
+  int active_profile_index = 0;  /* Default to Standard */
+  
+  /* Find the matching profile */
+  int i;
+  for (i = 0; i < sizeof(camera_profiles)/sizeof(camera_profile_t); i++) {
+    if (strcasecmp(camera_profiles[i].name, active_mode) == 0) {
+      active_profile_index = i;
+      break;
+    }
+  }
+  
+  /* Rearrange profiles array to put active profile first */
+  camera_profile_t *profiles_to_write = alloca(sizeof(camera_profiles));
+  memcpy(profiles_to_write, camera_profiles, sizeof(camera_profiles));
+  
+  if (active_profile_index > 0) {
+    /* Swap active profile to first position */
+    camera_profile_t temp = profiles_to_write[0];
+    profiles_to_write[0] = profiles_to_write[active_profile_index];
+    profiles_to_write[active_profile_index] = temp;
+  }
+  
+  x3f_printf(INFO, "Active picture mode: %s (using profile: %s)\n", 
+             active_mode, profiles_to_write[0].name);
+  
+  ret = write_camera_profiles(x3f, wb, profiles_to_write,
 			      sizeof(camera_profiles)/sizeof(camera_profile_t),
 			      f_out);
   if (ret != X3F_OK) {
