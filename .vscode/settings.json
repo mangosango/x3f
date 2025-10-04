@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "x3f_dump.h": "c"
+  },
+  "makefile.configureOnOpen": true
+}

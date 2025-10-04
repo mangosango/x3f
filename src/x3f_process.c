@@ -14,6 +14,7 @@
 #include "x3f_matrix.h"
 #include "x3f_denoise.h"
 #include "x3f_spatial_gain.h"
+#include "x3f_highlight_recovery.h"
 #include "x3f_printf.h"
 
 #include <string.h>
@@ -21,6 +22,13 @@
 #include <math.h>
 #include <stdio.h>
 #include <assert.h>
+
+static double clamp_value(double value, double min_value, double max_value)
+{
+  if (value < min_value) return min_value;
+  if (value > max_value) return max_value;
+  return value;
+}
 
 static int sum_area(x3f_area16_t area, int colors,
 		    uint64_t *sum)
@@ -294,18 +302,24 @@ static int get_max_intermediate(x3f_t *x3f, char *wb,
 				double intermediate_bias,
 				uint32_t *max_intermediate)
 {
-  double gain[3], maxgain = 0.0;
+  double gain[3];
   int i;
 
   if (!x3f_get_gain(x3f, wb, gain)) return 0;
 
-  /* Cap the gains to 1.0 to avoid clipping */
+  /* Account for Foveon layer saturation characteristics to prevent green tint.
+   * Each layer has different effective saturation levels due to the stacked design:
+   * - Blue (top): saturates first at ~85% of digital maximum
+   * - Green (middle): saturates at ~92% of digital maximum  
+   * - Red (bottom): saturates last at ~100% of digital maximum
+   * Scale the white levels so all layers clip at the same effective level. */
+  double foveon_saturation_factors[3] = {1.0, 0.92, 0.85}; /* R, G, B */
+  
   for (i=0; i<3; i++)
-    if (gain[i] > maxgain) maxgain = gain[i];
-  for (i=0; i<3; i++)
-    max_intermediate[i] =
-      (int32_t)round(gain[i]*(INTERMEDIATE_UNIT - intermediate_bias)/maxgain +
-		     intermediate_bias);
+    max_intermediate[i] = (uint32_t)round(INTERMEDIATE_UNIT * foveon_saturation_factors[i] + intermediate_bias);
+
+  x3f_printf(DEBUG, "Foveon-adjusted white levels: {%u,%u,%u}\n",
+             max_intermediate[0], max_intermediate[1], max_intermediate[2]);
 
   return 1;
 }
@@ -594,7 +608,7 @@ static void interpolate_bad_pixels(x3f_t *x3f, x3f_area16_t *image, int colors)
   free(bad_pixel_vec);
 }
 
-static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t *ilevels)
+static int preprocess_data(x3f_t *x3f, int fix_bad, int recover_highlights, char *wb, x3f_image_levels_t *ilevels)
 {
   x3f_area16_t image, qtop;
   int row, col, color;
@@ -669,9 +683,87 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
       }
     }
 
+    /* Calculate scale factors WITHOUT white balance gains - let DNG metadata handle WB */
     for (color = 0; color < 3; color++) {
         scale[color] = ((ilevels->white[color] - ilevels->black[color]) / (max_raw[color] - black_level[color])) * digital_ISO_Gain[color]; 
     }
+    
+    x3f_printf(DEBUG, "Scale factors (no WB applied): {%.6f, %.6f, %.6f}\n",
+               scale[0], scale[1], scale[2]);
+
+  /* Apply highlight recovery if requested */
+  if (recover_highlights) {
+    double wb_gains[3] = {1.0, 1.0, 1.0};
+    if (!x3f_get_gain(x3f, wb, wb_gains)) {
+      x3f_printf(WARN, "Could not get white balance gains for highlight recovery, using defaults\n");
+    }
+    x3f_printf(DEBUG, "WB gains for highlight recovery: {%.3f, %.3f, %.3f}\n",
+               wb_gains[0], wb_gains[1], wb_gains[2]);
+
+    /* Use Foveon saturation factors to account for layer-specific saturation */
+    double foveon_saturation_factors[3] = {1.0, 0.92, 0.85}; /* R, G, B */
+    x3f_printf(DEBUG, "Foveon saturation factors for recovery: {%.3f, %.3f, %.3f}\n",
+               foveon_saturation_factors[0], foveon_saturation_factors[1], foveon_saturation_factors[2]);
+
+    x3f_highlight_profile_t highlight_profile;
+    double meta_value;
+
+    x3f_highlight_profile_default(&highlight_profile);
+
+    if (x3f_get_camf_float(x3f, "HighlightBlendingLow", &meta_value)) {
+      highlight_profile.recovery_start_threshold = clamp_value(meta_value, 0.4, 0.99);
+    }
+
+    if (x3f_get_camf_float(x3f, "HighlightBlendingHigh", &meta_value)) {
+      double min_full = highlight_profile.recovery_start_threshold + 0.01;
+      double max_full = 0.999;
+      if (max_full < min_full) max_full = min_full;
+      highlight_profile.recovery_full_threshold = clamp_value(meta_value, min_full, max_full);
+    }
+
+    if (x3f_get_camf_float(x3f, "HighlightChanThresh1", &meta_value)) {
+      highlight_profile.neutral_ratio_soft = clamp_value(meta_value, 0.2, 0.95);
+    }
+
+    if (x3f_get_camf_float(x3f, "HighlightChanThresh2", &meta_value)) {
+      highlight_profile.neutral_ratio_hard = clamp_value(meta_value, 0.0, 0.95);
+    }
+
+    if (x3f_get_camf_float(x3f, "HighlightSatFactor", &meta_value)) {
+      highlight_profile.max_channel_value = clamp_value(meta_value * 0.995, 0.85, 0.999);
+    }
+
+    /* Sanitize profile to keep internal invariants consistent */
+    highlight_profile.complete_clip_threshold = clamp_value(highlight_profile.complete_clip_threshold, 0.9, 0.9995);
+
+    if (highlight_profile.recovery_full_threshold < highlight_profile.recovery_start_threshold + 0.01) {
+      highlight_profile.recovery_full_threshold = highlight_profile.recovery_start_threshold + 0.01;
+    }
+    if (highlight_profile.recovery_full_threshold > 0.999) {
+      highlight_profile.recovery_full_threshold = 0.999;
+    }
+
+    if (highlight_profile.neutral_ratio_hard <= 0.0 ||
+        highlight_profile.neutral_ratio_hard >= highlight_profile.neutral_ratio_soft) {
+      highlight_profile.neutral_ratio_hard = highlight_profile.neutral_ratio_soft * 0.5;
+    }
+
+    highlight_profile.max_channel_value = clamp_value(highlight_profile.max_channel_value, 0.85, 0.999);
+
+    x3f_printf(DEBUG,
+               "Highlight profile: start %.3f, full %.3f, clip %.3f, neutral_soft %.3f, neutral_hard %.3f, max %.3f\n",
+               highlight_profile.recovery_start_threshold,
+               highlight_profile.recovery_full_threshold,
+               highlight_profile.complete_clip_threshold,
+               highlight_profile.neutral_ratio_soft,
+               highlight_profile.neutral_ratio_hard,
+               highlight_profile.max_channel_value);
+
+    if (!x3f_recover_highlights(&image, max_raw, black_level, wb_gains, foveon_saturation_factors, 3,
+                               &highlight_profile)) {
+      x3f_printf(WARN, "Highlight recovery failed for main image\n");
+    }
+  }
 
   /* Preprocess image data (HUF/TRU->x3rgb16) */
   for (row = 0; row < image.rows; row++)
@@ -919,6 +1011,7 @@ static int expand_quattro(x3f_t *x3f, int denoise, x3f_area16_t *expanded)
 			       int fix_bad,
 			       int denoise,
 			       int apply_sgain,
+			       int recover_highlights,
 			       char *wb)
 {
   x3f_area16_t original_image, expanded;
@@ -943,7 +1036,7 @@ static int expand_quattro(x3f_t *x3f, int denoise, x3f_area16_t *expanded)
 
   if (encoding == UNPROCESSED) return ilevels == NULL;
 
-  if (!preprocess_data(x3f, fix_bad, wb, &il)) return 0;
+  if (!preprocess_data(x3f, fix_bad, recover_highlights, wb, &il)) return 0;
 
   if (expand_quattro(x3f, denoise, &expanded)) {
     /* NOTE: expand_quattro destroys the data of original_image */
@@ -969,6 +1062,7 @@ static int expand_quattro(x3f_t *x3f, int denoise, x3f_area16_t *expanded)
 				 x3f_image_levels_t *ilevels,
 				 x3f_color_encoding_t encoding,
 				 int apply_sgain,
+				 int recover_highlights,
 				 char *wb,
 				 uint32_t max_width,
 				 x3f_area8_t *preview)

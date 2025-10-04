@@ -55,7 +55,7 @@ x3f_return_t x3f_dump_raw_data_as_histogram(x3f_t *x3f,
   if (f_out == NULL) return X3F_OUTFILE_ERROR;
 
   if (!x3f_get_image(x3f, &image, NULL, encoding,
-		     crop, fix_bad, denoise, apply_sgain,
+		     crop, fix_bad, denoise, apply_sgain, 0,
 		     wb) ||
       image.channels < 3) {
     fclose(f_out);

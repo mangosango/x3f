@@ -292,6 +292,7 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 				      int fix_bad,
 				      int denoise,
 				      int apply_sgain,
+				      int recover_highlights,
 				      char *wb,
 				      int compress)
 {
@@ -318,14 +319,14 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 
   if (wb == NULL) wb = x3f_get_wb(x3f);
   if (!x3f_get_image(x3f, &image, &ilevels, NONE, 0,
-		     fix_bad, denoise, apply_sgain, wb) ||
+		     fix_bad, denoise, apply_sgain, recover_highlights, wb) ||
       image.channels != 3) {
     x3f_printf(ERR, "Could not get image\n");
     TIFFClose(f_out);
     return X3F_ARGUMENT_ERROR;
   }
   if (!x3f_get_preview(x3f, &image, &ilevels, SRGB,
-		       apply_sgain, wb, 300, &preview)) {
+		       apply_sgain, recover_highlights, wb, 300, &preview)) {
     x3f_printf(ERR, "Could not get preview\n");
     TIFFClose(f_out);
     free(image.buf);

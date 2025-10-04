@@ -1,0 +1,5 @@
+   : X3F TOOLS VERSION = 0.57-21-g817b8c3-osx-universal
+
+   : READ THE X3F FILE x3f_test_files/3_2_DP0Q0006.X3F
+   : Dump META DATA to x3f_test_files/3_2_DP0Q0006.X3F.meta
+   : Files processed: 1	errors: 0

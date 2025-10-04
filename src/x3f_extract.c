@@ -76,6 +76,7 @@ static void usage(char *progname)
           "   -no-sgain       Do not apply spatial gain (color compensation)\n"
           "   -no-fix-bad     Do not fix bad pixels\n"
           "   -sgain          Apply spatial gain (default except for Quattro)\n"
+          "   -recover-highlights  Recover burned highlights to prevent color casts\n"
           "   -wb <WB>        Select white balance preset\n"
           "   -compress       Enable ZIP compression for DNG and TIFF output\n"
           "   -ocl            Use OpenCL\n"
@@ -182,6 +183,7 @@ int main(int argc, char *argv[])
   int fix_bad = 1;
   int denoise = 1;
   int apply_sgain = -1;
+  int recover_highlights = 0;
   output_file_type_t file_type = DNG;
   x3f_color_encoding_t color_encoding = SRGB;
   int files = 0;
@@ -258,6 +260,8 @@ int main(int argc, char *argv[])
       apply_sgain = 0;
     else if (!strcmp(argv[i], "-sgain"))
       apply_sgain = 1;
+    else if (!strcmp(argv[i], "-recover-highlights"))
+      recover_highlights = 1;
     else if ((!strcmp(argv[i], "-wb")) && (i+1)<argc)
       wb = argv[++i];
     else if (!strcmp(argv[i], "-compress"))
@@ -406,7 +410,7 @@ int main(int argc, char *argv[])
     case DNG:
       x3f_printf(INFO, "Dump RAW as DNG to %s\n", outfile);
       ret_dump = x3f_dump_raw_data_as_dng(x3f, tmpfile,
-					  fix_bad, denoise, sgain, wb,
+					  fix_bad, denoise, sgain, recover_highlights, wb,
 					  compress);
       break;
     case PPMP3:
