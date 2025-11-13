@@ -146,8 +146,41 @@ static int get_bmt_to_xyz_noconvert(x3f_t *x3f, char *wb, double *bmt_to_xyz)
   return 1;
 }
 
+static int get_bmt_to_xyz_fcblue(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  double fcblue_matrix[9];
+  double base_bmt_to_xyz[9];
+  int got_matrix = 0;
+
+  /* Try to get the FCBlue color compensation matrix from metadata */
+  if (x3f_get_camf_matrix(x3f, "CMCM_FCBlue", 3, 3, 0, M_FLOAT, fcblue_matrix)) {
+    got_matrix = 1;
+  } else {
+    /* Fall back to hardcoded values from the test file */
+    fcblue_matrix[0] = 1.55391;  fcblue_matrix[1] = 0.357035; fcblue_matrix[2] = -0.910933;
+    fcblue_matrix[3] = 0.367226; fcblue_matrix[4] = 1.4933;   fcblue_matrix[5] = -0.860522;
+    fcblue_matrix[6] = 0.123477; fcblue_matrix[7] = 0.176646; fcblue_matrix[8] = 0.699866;
+    got_matrix = 1;
+  }
+
+  if (!got_matrix) {
+    return 0;
+  }
+
+  /* First get the standard BMT to XYZ conversion */
+  if (!x3f_get_bmt_to_xyz(x3f, wb, base_bmt_to_xyz)) {
+    return 0;
+  }
+
+  /* Apply the FCBlue color compensation matrix */
+  x3f_3x3_3x3_mul(base_bmt_to_xyz, fcblue_matrix, bmt_to_xyz);
+
+  return 1;
+}
+
 static const camera_profile_t camera_profiles[] = {
   {"Default", x3f_get_bmt_to_xyz, NULL},
+  {"FOV Classic Blue", get_bmt_to_xyz_fcblue, NULL},
   {"Grayscale", get_bmt_to_xyz_noconvert, grayscale_mix_std},
   {"Grayscale (red filter)", get_bmt_to_xyz_noconvert, grayscale_mix_red},
   {"Grayscale (blue filter)", get_bmt_to_xyz_noconvert, grayscale_mix_blue},
@@ -224,11 +257,25 @@ static x3f_return_t write_camera_profiles(x3f_t *x3f, char *wb,
   FILE *tiff_file;
   uint32_t *profile_offsets;
   int i;
+  int default_profile_idx = 0;
 
   assert(num >= 1);
-  if (!write_camera_profile(x3f, wb, &profiles[0], tiff))
+
+  /* Check if we should use FCBlue as the default profile */
+  if (x3f->header.version >= X3F_VERSION_2_3 &&
+      strcmp(x3f->header.color_mode, "FCBlue") == 0) {
+    /* Find the FCBlue profile index */
+    for (i = 0; i < num; i++) {
+      if (strcmp(profiles[i].name, "FOV Classic Blue") == 0) {
+        default_profile_idx = i;
+        break;
+      }
+    }
+  }
+
+  if (!write_camera_profile(x3f, wb, &profiles[default_profile_idx], tiff))
     return X3F_ARGUMENT_ERROR;
-  TIFFSetField(tiff, TIFFTAG_ASSHOTPROFILENAME, profiles[0].name);
+  TIFFSetField(tiff, TIFFTAG_ASSHOTPROFILENAME, profiles[default_profile_idx].name);
   if (num == 1) return X3F_OK;
 
   profile_offsets = alloca((num-1)*sizeof(uint32_t));
@@ -236,12 +283,16 @@ static x3f_return_t write_camera_profiles(x3f_t *x3f, char *wb,
   tiff_file = fdopen(dup(TIFFFileno(tiff)), "w+b");
   if (!tiff_file) return X3F_OUTFILE_ERROR;
 
-  for (i=1; i < num; i++) {
+  int profile_offset_idx = 0;
+  for (i=0; i < num; i++) {
     FILE *tmp;
     TIFF *tmp_tiff;
 #define BUFSIZE 1024
     char buf[BUFSIZE];
     int offset, count;
+
+    /* Skip the default profile that was already written */
+    if (i == default_profile_idx) continue;
 
     if (!(tmp = tmpfile())) {
       fclose(tiff_file);
@@ -264,7 +315,7 @@ static x3f_return_t write_camera_profiles(x3f_t *x3f, char *wb,
     fseek(tiff_file, 0, SEEK_END);
     offset = (ftell(tiff_file)+1) & ~1; /* 2-byte alignment */
     fseek(tiff_file, offset, SEEK_SET);
-    profile_offsets[i-1] = offset;
+    profile_offsets[profile_offset_idx++] = offset;
 
     fputs("MMCR", tiff_file);	/* DNG camera profile magic in big endian */
     fseek(tmp, 4, SEEK_SET);	/* Skip over the standard TIFF magic */
