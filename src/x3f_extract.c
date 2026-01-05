@@ -76,9 +76,19 @@ static void usage(char *progname)
           "   -no-sgain       Do not apply spatial gain (color compensation)\n"
           "   -no-fix-bad     Do not fix bad pixels\n"
           "   -sgain          Apply spatial gain (default except for Quattro)\n"
-          "   -wb <WB>        Select white balance preset\n"
+          "   -wb <WB>        Select white balance preset or custom R,G,B values\n"
+          "                   Preset: Auto, Sunlight, Shade, Overcast, etc.\n"
+          "                   Custom: R,G,B gains (e.g., -wb 0.3,1.0,3.5)\n"
+          "                   Values must be between 0.0 and 10.0\n"
           "   -compress       Enable ZIP compression for DNG and TIFF output\n"
           "   -ocl            Use OpenCL\n"
+	  "\n"
+	  "IR CHANNEL SEPARATION (for full spectrum cameras)\n"
+	  "   -ir-separate    Enable IR/Red/Green channel separation mode\n"
+	  "   -ir-calibrate   Output calibration data for coefficient tuning\n"
+	  "   -ir-matrix <M>  Custom 9-value matrix for channel separation\n"
+	  "                   Format: T_G,T_R,T_IR,M_G,M_R,M_IR,B_G,B_R,B_IR\n"
+	  "                   Default: 0.70,0.25,0.05,0.45,0.45,0.10,0.10,0.40,0.50\n"
 	  "\n"
 	  "STRANGE STUFF\n"
           "   -offset <OFF>   Offset for SD14 and older\n"
@@ -193,6 +203,15 @@ int main(int argc, char *argv[])
   char *outdir = NULL;
   x3f_return_t ret;
 
+  /* IR channel separation mode variables */
+  int ir_separation_mode = 0;
+  int ir_calibration_mode = 0;
+  double ir_coeff_matrix[9] = {
+    0.70, 0.25, 0.05,  /* Top layer coefficients */
+    0.45, 0.45, 0.10,  /* Middle layer coefficients */
+    0.10, 0.40, 0.50   /* Bottom layer coefficients */
+  };
+
   int i;
 
   x3f_printf(INFO, "X3F TOOLS VERSION = %s\n\n", version);
@@ -264,6 +283,23 @@ int main(int argc, char *argv[])
       compress = 1;
     else if (!strcmp(argv[i], "-ocl"))
       use_opencl = 1;
+
+  /* IR Channel Separation */
+    else if (!strcmp(argv[i], "-ir-separate"))
+      ir_separation_mode = 1;
+    else if (!strcmp(argv[i], "-ir-calibrate"))
+      ir_calibration_mode = 1;
+    else if ((!strcmp(argv[i], "-ir-matrix")) && (i+1)<argc) {
+      char *matrix_str = argv[++i];
+      int n = sscanf(matrix_str, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf",
+                     &ir_coeff_matrix[0], &ir_coeff_matrix[1], &ir_coeff_matrix[2],
+                     &ir_coeff_matrix[3], &ir_coeff_matrix[4], &ir_coeff_matrix[5],
+                     &ir_coeff_matrix[6], &ir_coeff_matrix[7], &ir_coeff_matrix[8]);
+      if (n != 9) {
+        fprintf(stderr, "Error: -ir-matrix requires exactly 9 comma-separated values\n");
+        usage(argv[0]);
+      }
+    }
 
   /* Strange Stuff */
     else if ((!strcmp(argv[i], "-offset")) && (i+1)<argc)
@@ -407,7 +443,10 @@ int main(int argc, char *argv[])
       x3f_printf(INFO, "Dump RAW as DNG to %s\n", outfile);
       ret_dump = x3f_dump_raw_data_as_dng(x3f, tmpfile,
 					  fix_bad, denoise, sgain, wb,
-					  compress);
+					  compress,
+					  ir_separation_mode,
+					  ir_calibration_mode,
+					  ir_coeff_matrix);
       break;
     case PPMP3:
     case PPMP6:

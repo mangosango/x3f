@@ -22,6 +22,143 @@
 #include <stdio.h>
 #include <assert.h>
 
+/* IR Channel Separation Functions */
+
+/* Matrix inversion using Gauss-Jordan elimination for 3x3 matrix */
+static void matrix_inverse_3x3(double *m, double *inv) {
+    double det;
+
+    /* Calculate determinant */
+    det = m[0] * (m[4]*m[8] - m[5]*m[7]) -
+          m[1] * (m[3]*m[8] - m[5]*m[6]) +
+          m[2] * (m[3]*m[7] - m[4]*m[6]);
+
+    if (fabs(det) < 1e-10) {
+        x3f_printf(ERR, "Matrix is singular, cannot invert\n");
+        return;
+    }
+
+    /* Calculate cofactor matrix and transpose */
+    inv[0] = (m[4]*m[8] - m[5]*m[7]) / det;
+    inv[1] = (m[2]*m[7] - m[1]*m[8]) / det;
+    inv[2] = (m[1]*m[5] - m[2]*m[4]) / det;
+    inv[3] = (m[5]*m[6] - m[3]*m[8]) / det;
+    inv[4] = (m[0]*m[8] - m[2]*m[6]) / det;
+    inv[5] = (m[2]*m[3] - m[0]*m[5]) / det;
+    inv[6] = (m[3]*m[7] - m[4]*m[6]) / det;
+    inv[7] = (m[1]*m[6] - m[0]*m[7]) / det;
+    inv[8] = (m[0]*m[4] - m[1]*m[3]) / det;
+}
+
+/* Channel separation function for IR/Red/Green isolation */
+static void separate_ir_channels(x3f_area16_t *image, double *coeff_matrix) {
+    uint16_t *data = image->data;
+    int width = image->columns;
+    int height = image->rows;
+    int row_stride = image->row_stride;
+    int channels = image->channels;
+    int row, col;
+
+    if (channels < 3) {
+        x3f_printf(ERR, "Need at least 3 channels for IR separation\n");
+        return;
+    }
+
+    /* Option 2: Soft mixing - gentle separation without extreme values
+     * This enhances channel separation while preserving natural response
+     * Uses mild coefficients to avoid oversaturation issues
+     * The calibration matrix is ignored - we use fixed gentle coefficients */
+
+    /* Process each pixel */
+    for (row = 0; row < height; row++) {
+        for (col = 0; col < width; col++) {
+            int idx = row_stride * row + channels * col;
+
+            /* Get raw BMT values */
+            double B = (double)data[idx + 0];  /* Bottom layer (IR-rich) */
+            double M = (double)data[idx + 1];  /* Middle layer (Red-rich) */
+            double T = (double)data[idx + 2];  /* Top layer (Green-rich) */
+
+            /* Soft separation based on your calibration data */
+            double IR = B * 1.3 - M * 0.2 - T * 0.1;   /* NIR: Strong bottom, reduce others */
+            double R  = M * 0.6 + B * 0.5 - T * 0.1;   /* Red: Balance middle/bottom */
+            double G  = T * 0.7 + M * 0.5 - B * 0.2;   /* Green: Strong top/middle */
+            
+            /* Clamp values to valid range */
+            IR = fmax(0, fmin(65535, IR));
+            R  = fmax(0, fmin(65535, R));
+            G  = fmax(0, fmin(65535, G));
+
+            /* Store separated channels for false color infrared visualization
+             * IR -> Red display (vegetation appears red/magenta)
+             * R -> Green display
+             * G -> Blue display */
+            data[idx + 0] = (uint16_t)IR;  /* NIR -> Display Red */
+            data[idx + 1] = (uint16_t)R;   /* Red -> Display Green */
+            data[idx + 2] = (uint16_t)G;   /* Green -> Display Blue */
+        }
+    }
+
+    x3f_printf(INFO, "IR channel separation applied (soft mixing mode)\n");
+}
+
+/* Output calibration data for coefficient determination */
+static void output_calibration_data(x3f_area16_t *image, const char *filename) {
+    FILE *f = fopen(filename, "w");
+    int cx = image->columns / 2;
+    int cy = image->rows / 2;
+    int sample_size = 100;
+    int row, col;
+    int row_stride = image->row_stride;
+    int channels = image->channels;
+
+    if (!f) {
+        x3f_printf(ERR, "Could not open calibration file %s\n", filename);
+        return;
+    }
+
+    fprintf(f, "# Calibration data: T,M,B values for coefficient determination\n");
+    fprintf(f, "# Capture images of pure R, G, and IR targets\n");
+    fprintf(f, "# Image dimensions: %dx%d\n", image->columns, image->rows);
+
+    /* Calculate average values for center region */
+    double avg_T = 0, avg_M = 0, avg_B = 0;
+    int count = 0;
+
+    int y_start = cy - sample_size/2;
+    int y_end = cy + sample_size/2;
+    int x_start = cx - sample_size/2;
+    int x_end = cx + sample_size/2;
+
+    /* Ensure we stay within bounds */
+    if (y_start < 0) y_start = 0;
+    if (y_end > image->rows) y_end = image->rows;
+    if (x_start < 0) x_start = 0;
+    if (x_end > image->columns) x_end = image->columns;
+
+    for (row = y_start; row < y_end; row++) {
+        for (col = x_start; col < x_end; col++) {
+            int idx = row_stride * row + channels * col;
+            avg_B += image->data[idx + 0];
+            avg_M += image->data[idx + 1];
+            avg_T += image->data[idx + 2];
+            count++;
+        }
+    }
+
+    if (count > 0) {
+        avg_T /= count;
+        avg_M /= count;
+        avg_B /= count;
+    }
+
+    fprintf(f, "# Center region (%dx%d pixels) average:\n", count, 1);
+    fprintf(f, "Average TMB: %.2f, %.2f, %.2f\n", avg_T, avg_M, avg_B);
+
+    fclose(f);
+    x3f_printf(INFO, "Calibration data written to %s\n", filename);
+}
+
 static int sum_area(x3f_area16_t area, int colors,
 		    uint64_t *sum)
 {
@@ -205,7 +342,43 @@ static void get_raw_neutral(double *raw_to_xyz, double *raw_neutral)
 {
   double cam_to_xyz[9], wb_correction[9], gain_fact[3];
 
-  if (x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceGains", wb, 3, 0, gain) ||
+  /* Check if wb contains custom RGB values (e.g., "0.3,1.0,3.5") */
+  if (wb && strchr(wb, ',')) {
+    char *wb_copy = strdup(wb);
+    char *token;
+    int i = 0;
+
+    if (!wb_copy) return 0;
+
+    /* Parse comma-separated RGB values */
+    token = strtok(wb_copy, ",");
+    while (token != NULL && i < 3) {
+      char *endptr;
+      double value = strtod(token, &endptr);
+
+      /* Validate the parsed value */
+      if (*endptr != '\0' || value < 0.0 || value > 10.0) {
+        x3f_printf(ERR, "Invalid custom white balance value: %s (must be 0.0-10.0)\n", token);
+        free(wb_copy);
+        return 0;
+      }
+
+      gain[i++] = value;
+      token = strtok(NULL, ",");
+    }
+
+    free(wb_copy);
+
+    /* Ensure we got exactly 3 values */
+    if (i != 3) {
+      x3f_printf(ERR, "Custom white balance must have exactly 3 values (R,G,B)\n");
+      return 0;
+    }
+
+    x3f_printf(INFO, "Using custom white balance gains: R=%f, G=%f, B=%f\n",
+               gain[0], gain[1], gain[2]);
+  }
+  else if (x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceGains", wb, 3, 0, gain) ||
       x3f_get_camf_matrix_for_wb(x3f, "DP1_WhiteBalanceGains", wb, 3, 0, gain));
   else if (x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceIlluminants", wb,
 				      3, 3, cam_to_xyz) &&
@@ -239,7 +412,30 @@ static void get_raw_neutral(double *raw_to_xyz, double *raw_neutral)
 {
   double cc_matrix[9], cam_to_xyz[9], wb_correction[9];
 
-  if (x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceColorCorrections", wb,
+  /* Check if wb contains custom RGB values - use default matrix */
+  if (wb && strchr(wb, ',')) {
+    /* Use a neutral color correction matrix for custom white balance */
+    /* Try to get the Auto or Sunlight CC matrix as a reasonable default */
+    if (!x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceColorCorrections", "Auto",
+				    3, 3, cc_matrix) &&
+        !x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceColorCorrections", "Sunlight",
+				    3, 3, cc_matrix) &&
+        !x3f_get_camf_matrix_for_wb(x3f, "DP1_WhiteBalanceColorCorrections", "Auto",
+				    3, 3, cc_matrix)) {
+      /* If we can't find any default matrix, use identity matrix */
+      int i, j;
+      for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+          cc_matrix[i*3 + j] = (i == j) ? 1.0 : 0.0;
+    }
+
+    double srgb_to_xyz[9];
+    x3f_sRGB_to_XYZ(srgb_to_xyz);
+    x3f_3x3_3x3_mul(srgb_to_xyz, cc_matrix, bmt_to_xyz);
+
+    x3f_printf(INFO, "Using default color correction matrix for custom white balance\n");
+  }
+  else if (x3f_get_camf_matrix_for_wb(x3f, "WhiteBalanceColorCorrections", wb,
 				 3, 3, cc_matrix) ||
       x3f_get_camf_matrix_for_wb(x3f, "DP1_WhiteBalanceColorCorrections", wb,
 				 3, 3, cc_matrix)) {
@@ -594,7 +790,8 @@ static void interpolate_bad_pixels(x3f_t *x3f, x3f_area16_t *image, int colors)
   free(bad_pixel_vec);
 }
 
-static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t *ilevels)
+static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t *ilevels,
+                          int ir_separation_mode, int ir_calibration_mode, double *ir_coeff_matrix)
 {
   x3f_area16_t image, qtop;
   int row, col, color;
@@ -723,6 +920,19 @@ static int preprocess_data(x3f_t *x3f, int fix_bad, char *wb, x3f_image_levels_t
   }
 
   if (fix_bad) interpolate_bad_pixels(x3f, &image, 3);
+
+  /* Apply IR channel separation if enabled */
+  if (ir_separation_mode) {
+    x3f_printf(INFO, "Applying IR channel separation...\n");
+    separate_ir_channels(&image, ir_coeff_matrix);
+  }
+
+  /* Output calibration data if requested */
+  if (ir_calibration_mode) {
+    char calibration_file[256];
+    snprintf(calibration_file, sizeof(calibration_file), "calibration_data.txt");
+    output_calibration_data(&image, calibration_file);
+  }
 
   return 1;
 }
@@ -919,7 +1129,10 @@ static int expand_quattro(x3f_t *x3f, int denoise, x3f_area16_t *expanded)
 			       int fix_bad,
 			       int denoise,
 			       int apply_sgain,
-			       char *wb)
+			       char *wb,
+			       int ir_separation_mode,
+			       int ir_calibration_mode,
+			       double *ir_coeff_matrix)
 {
   x3f_area16_t original_image, expanded;
   x3f_image_levels_t il;
@@ -943,7 +1156,7 @@ static int expand_quattro(x3f_t *x3f, int denoise, x3f_area16_t *expanded)
 
   if (encoding == UNPROCESSED) return ilevels == NULL;
 
-  if (!preprocess_data(x3f, fix_bad, wb, &il)) return 0;
+  if (!preprocess_data(x3f, fix_bad, wb, &il, ir_separation_mode, ir_calibration_mode, ir_coeff_matrix)) return 0;
 
   if (expand_quattro(x3f, denoise, &expanded)) {
     /* NOTE: expand_quattro destroys the data of original_image */

@@ -17,6 +17,9 @@ extern x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f, char *outfilename,
 					     int denoise,
 					     int apply_sgain,
 					     char *wb,
-					     int compress);
+					     int compress,
+					     int ir_separation_mode,
+					     int ir_calibration_mode,
+					     double *ir_coeff_matrix);
 
 #endif

@@ -32,7 +32,7 @@ x3f_return_t x3f_dump_raw_data_as_tiff(x3f_t *x3f,
 
   if (!x3f_get_image(x3f, &image, NULL, encoding,
 		     crop, fix_bad, denoise, apply_sgain,
-		     wb)) {
+		     wb, 0, 0, NULL)) {
     TIFFClose(f_out);
     return X3F_ARGUMENT_ERROR;
   }

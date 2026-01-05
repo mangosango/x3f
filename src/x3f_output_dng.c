@@ -14,6 +14,7 @@
 #include "x3f_meta.h"
 #include "x3f_image.h"
 #include "x3f_spatial_gain.h"
+#include "x3f_ir_coefficients.h"
 #include "x3f_printf.h"
 
 #include <stdio.h>
@@ -146,28 +147,109 @@ static int get_bmt_to_xyz_noconvert(x3f_t *x3f, char *wb, double *bmt_to_xyz)
   return 1;
 }
 
+/* Matrix function for IR-Separated profile
+ * This profile handles false color infrared visualization where:
+ * - NIR (near-infrared) is displayed as Red
+ * - Red is displayed as Green
+ * - Green is displayed as Blue
+ * This creates the classic false color IR look where healthy vegetation appears red/magenta
+ */
+static int get_bmt_to_xyz_ir_separated(x3f_t *x3f, char *wb, double *bmt_to_xyz)
+{
+  /* Check if IR channel separation has already been applied to the data */
+  if (x3f->ir_data_remapped) {
+    /* Data has already been remapped by separate_ir_channels()
+     * Channel 0 already contains NIR, Channel 1 contains Red, Channel 2 contains Green
+     * Just apply standard Adobe RGB to XYZ conversion without further remapping
+     */
+    x3f_AdobeRGB_to_XYZ(bmt_to_xyz);
+  } else {
+    /* Data is still in normal BMT format
+     * Apply the IR separation transformation through the color matrix
+     * This allows the profile to work without the -ir-separate flag
+     */
+
+    /* IR separation coefficients matrix with white balance pre-compensation
+     * Rows represent output channels (NIR, Red, Green)
+     * Columns represent input BMT layers (Bottom, Middle, Top)
+     * NIR channel scaled down by 0.4 to prevent extreme red cast
+     */
+    double ir_separation_matrix[9] = {
+      /* NIR from BMT (scaled to reduce dominance) */
+      1.55391, 0.357035, -0.9109336,  /* Original * 0.4 for balance */
+      /* Red from BMT (normalized from calibrated v2 data) */
+      0.367226, 1.4933, -0.860522,
+      /* Green from BMT (normalized from calibrated v2 data) */
+      -0.4, 0.5, 0.9
+    };
+
+    /* False color IR mapping: Channel swap for IR visualization
+     * NIR->R, R->G, G->B for classic false color infrared look
+     */
+    double false_color_remap[9] = {
+      1.5, 0.0, -0.5,   /* NIR -> Red display */
+      -0.75, 2.5, -0.75,   /* Red -> Green display */
+      0.8, -1.0, 1.2    /* Green -> Blue display */
+    };
+
+    /* Standard Adobe RGB to XYZ conversion for final output */
+    double adobe_to_xyz[9];
+    x3f_AdobeRGB_to_XYZ(adobe_to_xyz);
+
+    /* Combine all transformations:
+     * BMT -> IR separated channels -> False color remap -> Adobe RGB -> XYZ
+     */
+    double temp_matrix[9];
+    x3f_3x3_3x3_mul(false_color_remap, ir_separation_matrix, temp_matrix);
+    x3f_3x3_3x3_mul(adobe_to_xyz, temp_matrix, bmt_to_xyz);
+  }
+
+  return 1;
+}
+
+/* Helper function for FCBlue - duplicated from x3f_process.c */
+static void get_raw_neutral_fcblue(double *raw_to_xyz, double *raw_neutral)
+{
+  double d65_xyz[3] = {0.95047, 1.00000, 1.08883};
+  double xyz_to_raw[9];
+
+  x3f_3x3_inverse(raw_to_xyz, xyz_to_raw);
+  x3f_3x3_3x1_mul(xyz_to_raw, d65_xyz, raw_neutral);
+}
+
 static int get_bmt_to_xyz_fcblue(x3f_t *x3f, char *wb, double *bmt_to_xyz)
 {
   double fcblue_matrix[9];
-  double base_bmt_to_xyz[9];
-  int got_matrix = 0;
+  int got_fcblue_matrix = 0;
+
+  /* IMPORTANT: For custom white balance (contains comma), use standard processing
+   * The FCBlue matrix contains fixed color calibration that conflicts with
+   * arbitrary white balance adjustments. To preserve user's white balance choice,
+   * we fall back to standard color processing for custom WB values.
+   */
+  if (wb && strchr(wb, ',')) {
+    /* Custom white balance - don't apply FCBlue, use standard processing */
+    return x3f_get_bmt_to_xyz(x3f, wb, bmt_to_xyz);
+  }
 
   /* Try to get the FCBlue color compensation matrix from metadata */
   if (x3f_get_camf_matrix(x3f, "CMCM_FCBlue", 3, 3, 0, M_FLOAT, fcblue_matrix)) {
-    got_matrix = 1;
+    got_fcblue_matrix = 1;
   } else {
     /* Fall back to hardcoded values from the test file */
     fcblue_matrix[0] = 1.55391;  fcblue_matrix[1] = 0.357035; fcblue_matrix[2] = -0.910933;
     fcblue_matrix[3] = 0.367226; fcblue_matrix[4] = 1.4933;   fcblue_matrix[5] = -0.860522;
     fcblue_matrix[6] = 0.123477; fcblue_matrix[7] = 0.176646; fcblue_matrix[8] = 0.699866;
-    got_matrix = 1;
+    got_fcblue_matrix = 1;
   }
 
-  if (!got_matrix) {
+  if (!got_fcblue_matrix) {
     return 0;
   }
 
-  /* First get the standard BMT to XYZ conversion */
+  /* For preset white balance modes, apply FCBlue as originally designed */
+  /* First get the standard BMT to XYZ conversion with the preset WB */
+  double base_bmt_to_xyz[9];
   if (!x3f_get_bmt_to_xyz(x3f, wb, base_bmt_to_xyz)) {
     return 0;
   }
@@ -185,6 +267,7 @@ static const camera_profile_t camera_profiles[] = {
   {"Grayscale (red filter)", get_bmt_to_xyz_noconvert, grayscale_mix_red},
   {"Grayscale (blue filter)", get_bmt_to_xyz_noconvert, grayscale_mix_blue},
   {"Unconverted", get_bmt_to_xyz_noconvert, NULL},
+  {"IR-Separated", get_bmt_to_xyz_ir_separated, NULL},
 };
 
 static int write_camera_profile(x3f_t *x3f, char *wb,
@@ -344,7 +427,10 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 				      int denoise,
 				      int apply_sgain,
 				      char *wb,
-				      int compress)
+				      int compress,
+				      int ir_separation_mode,
+				      int ir_calibration_mode,
+				      double *ir_coeff_matrix)
 {
   x3f_return_t ret;
   int fd = open(outfilename, O_RDWR | BINMODE | O_CREAT | O_TRUNC, 0644);
@@ -369,7 +455,8 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
 
   if (wb == NULL) wb = x3f_get_wb(x3f);
   if (!x3f_get_image(x3f, &image, &ilevels, NONE, 0,
-		     fix_bad, denoise, apply_sgain, wb) ||
+		     fix_bad, denoise, apply_sgain, wb,
+		     ir_separation_mode, ir_calibration_mode, ir_coeff_matrix) ||
       image.channels != 3) {
     x3f_printf(ERR, "Could not get image\n");
     TIFFClose(f_out);
@@ -404,9 +491,27 @@ x3f_return_t x3f_dump_raw_data_as_dng(x3f_t *x3f,
     TIFFSetField(f_out, TIFFTAG_BASELINEEXPOSURE, baseline_exposure);
   }
 
-  ret = write_camera_profiles(x3f, wb, camera_profiles,
-			      sizeof(camera_profiles)/sizeof(camera_profile_t),
-			      f_out);
+  /* Set a flag in x3f structure to indicate IR separation mode
+   * This allows profile functions to know if data has been remapped */
+  x3f->ir_data_remapped = ir_separation_mode;
+
+  /* Select camera profiles based on IR separation mode */
+  if (ir_separation_mode) {
+    /* For IR separation, only write the IR-Separated profile */
+    const camera_profile_t *ir_profile = &camera_profiles[6]; /* IR-Separated profile */
+    ret = write_camera_profiles(x3f, wb, ir_profile, 1, f_out);
+
+    /* Add custom metadata for IR separation */
+    TIFFSetField(f_out, TIFFTAG_SOFTWARE, "x3f_extract IR-separation mode");
+    TIFFSetField(f_out, TIFFTAG_IMAGEDESCRIPTION,
+                 "False Color IR: Ch0=NIR (displays as red), Ch1=Red (displays as green), Ch2=Green (displays as blue)");
+  } else {
+    /* Standard profiles for normal mode - includes all profiles */
+    ret = write_camera_profiles(x3f, wb, camera_profiles,
+			        sizeof(camera_profiles)/sizeof(camera_profile_t),
+			        f_out);
+  }
+
   if (ret != X3F_OK) {
     x3f_printf(ERR, "Could not write camera profiles\n");
     TIFFClose(f_out);

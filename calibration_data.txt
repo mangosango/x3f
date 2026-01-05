@@ -1,0 +1,5 @@
+# Calibration data: T,M,B values for coefficient determination
+# Capture images of pure R, G, and IR targets
+# Image dimensions: 4928x3264
+# Center region (10000x1 pixels) average:
+Average TMB: 1643.93, 1517.34, 945.32

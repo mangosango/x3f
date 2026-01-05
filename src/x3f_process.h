@@ -38,7 +38,10 @@ extern int x3f_get_image(x3f_t *x3f,
 			 int fix_bad,
 			 int denoise,
 			 int apply_sgain,
-			 char *wb);
+			 char *wb,
+			 int ir_separation_mode,
+			 int ir_calibration_mode,
+			 double *ir_coeff_matrix);
 
 extern int x3f_get_preview(x3f_t *x3f,
 			   x3f_area16_t *image,
